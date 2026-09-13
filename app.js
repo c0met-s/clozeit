@@ -15,7 +15,7 @@
   const newNoteBtn = document.getElementById("new-note");
   const deleteNoteBtn = document.getElementById("delete-note");
   const hideRevealedBtn = document.getElementById("hide-revealed");
-  const markImportantBtn = document.getElementById("mark-important");
+  const wrongOnlyBtn = document.getElementById("wrong-only");
   const exportShareBtn = document.getElementById("export-share");
   const publishJsonBtn = document.getElementById("publish-json");
   const markHideBtn = document.getElementById("mark-hide");
@@ -43,7 +43,6 @@
   let lastPointerType = "mouse";
   let longPressTimer = null;
   let longPressHandled = false;
-  let studyImportantMode = false;
   let mode = normalizeMode(state.mode);
   const customSelectionName = "clozeit-mark-selection";
 
@@ -58,7 +57,7 @@
     },
     study: {
       label: "Study mode",
-      detail: "Locked view. Turn on Mark important, then click words that were hard."
+      detail: "Locked view. Selection, right-click, copy, and marking hotkeys are off."
     }
   };
 
@@ -89,7 +88,8 @@
         }
       ],
       mode: "mark",
-      highlightColor: "yellow"
+      highlightColor: "yellow",
+      reviewWrongOnly: false
     };
   }
 
@@ -120,6 +120,7 @@
       }
       saved.mode = normalizeMode(saved.mode);
       saved.highlightColor = normalizeHighlightColor(saved.highlightColor);
+      saved.reviewWrongOnly = Boolean(saved.reviewWrongOnly);
       return saved;
     } catch (error) {
       return defaultState();
@@ -222,9 +223,9 @@
         wordIndex: isSpace ? null : wordIndex++,
         hidden: false,
         hiddenGroup: null,
-        hinted: false,
+        wrong: false,
+      hinted: false,
         revealed: false,
-        important: false,
         highlight: null
       };
     });
@@ -253,15 +254,15 @@
       wordIndex: token.wordIndex ?? null,
       hidden: Boolean(token.hidden),
       hiddenGroup: typeof token.hiddenGroup === "string" ? token.hiddenGroup : null,
+      wrong: Boolean(token.wrong),
       hinted: Boolean(token.hinted),
       revealed: Boolean(token.revealed),
-      important: Boolean(token.important),
       highlight: normalizeTokenHighlight(token.highlight)
     };
   }
 
   function hasMarkState(token) {
-    return Boolean(token.hidden || token.hiddenGroup || token.hinted || token.revealed || token.important || token.highlight);
+    return Boolean(token.hidden || token.hiddenGroup || token.wrong || token.hinted || token.revealed || token.highlight);
   }
 
   function plainToken(value) {
@@ -273,9 +274,9 @@
       wordIndex: null,
       hidden: false,
       hiddenGroup: null,
+      wrong: false,
       hinted: false,
       revealed: false,
-      important: false,
       highlight: null
     };
   }
@@ -299,7 +300,6 @@
         token.hiddenGroup = null;
         token.hinted = false;
         token.revealed = false;
-        token.important = false;
         token.highlight = null;
       }
     });
@@ -335,9 +335,9 @@
         wordIndex: isSpace ? null : wordIndex++,
         hidden: Boolean(token.hidden),
         hiddenGroup: typeof token.hiddenGroup === "string" ? token.hiddenGroup : null,
+        wrong: Boolean(token.wrong),
         hinted: Boolean(token.hinted),
         revealed: Boolean(token.revealed),
-        important: Boolean(token.important),
         highlight: normalizeTokenHighlight(token.highlight)
       };
     });
@@ -530,16 +530,21 @@
 
   function tokenClass(token) {
     const classes = ["token", "word"];
+    const reviewHidden = shouldReviewHiddenToken(token);
     if (mode === "mark" && token.id === activeTokenId) {
       classes.push("selected");
     }
     if (token.hidden) classes.push("hidden");
-    if (token.hidden && !token.revealed && !token.hinted) classes.push("covered");
-    if (token.hidden && !token.revealed && token.hinted) classes.push("hinted");
-    if (token.revealed) classes.push("revealed");
-    if (token.important) classes.push("important");
+    if (token.wrong) classes.push("wrong");
+    if (reviewHidden && !token.revealed && !token.hinted) classes.push("covered");
+    if (reviewHidden && !token.revealed && token.hinted) classes.push("hinted");
+    if (token.revealed || (token.hidden && !reviewHidden)) classes.push("revealed");
     if (token.highlight) classes.push(`highlight-${token.highlight}`);
     return classes.join(" ");
+  }
+
+  function shouldReviewHiddenToken(token) {
+    return Boolean(token.hidden && (mode !== "study" || !state.reviewWrongOnly || token.wrong));
   }
 
   function setCurrentFolder(folderId) {
@@ -758,17 +763,13 @@
       document.body.classList.toggle("mode-edit", mode === "edit");
       document.body.classList.toggle("mode-mark", mode === "mark");
       document.body.classList.toggle("mode-study", mode === "study");
-      if (mode !== "study") {
-        studyImportantMode = false;
-      }
-      document.body.classList.toggle("mark-important", studyImportantMode);
       titleEl.disabled = mode === "study";
       hideRevealedBtn.disabled = mode !== "study";
       hideRevealedBtn.classList.toggle("study-action", mode === "study");
-      markImportantBtn.disabled = mode !== "study";
-      markImportantBtn.classList.toggle("study-action", mode === "study");
-      markImportantBtn.classList.toggle("active", studyImportantMode);
-      markImportantBtn.setAttribute("aria-pressed", String(studyImportantMode));
+      wrongOnlyBtn.disabled = mode !== "study";
+      wrongOnlyBtn.classList.toggle("study-action", mode === "study");
+      wrongOnlyBtn.classList.toggle("active", Boolean(state.reviewWrongOnly));
+      wrongOnlyBtn.setAttribute("aria-pressed", String(Boolean(state.reviewWrongOnly)));
       updateMarkActions();
 
       modeButtons.forEach((button) => {
@@ -1021,9 +1022,9 @@
       wordIndex: token.wordIndex,
       hidden: Boolean(token.hidden),
       hiddenGroup: typeof token.hiddenGroup === "string" ? token.hiddenGroup : null,
+      wrong: Boolean(token.wrong),
       hinted: Boolean(token.hinted),
       revealed: Boolean(token.revealed),
-      important: Boolean(token.important),
       highlight: token.highlight || null
     };
   }
@@ -1174,37 +1175,6 @@
     }
   }
 
-  function toggleStudyImportantMode() {
-    if (mode !== "study") return;
-    studyImportantMode = !studyImportantMode;
-    document.body.classList.toggle("mark-important", studyImportantMode);
-    markImportantBtn.classList.toggle("active", studyImportantMode);
-    markImportantBtn.setAttribute("aria-pressed", String(studyImportantMode));
-    showModeDetail(
-      studyImportantMode
-        ? "Mark important is on. Click words to remember where you struggled."
-        : modeCopy.study.detail
-    );
-  }
-
-  function toggleTokenImportant(note, token) {
-    const nextImportant = !token.important;
-    const applyState = (candidate) => {
-      candidate.important = nextImportant;
-    };
-
-    if (token.hiddenGroup) {
-      note.tokens.forEach((candidate) => {
-        if (candidate.hiddenGroup === token.hiddenGroup) {
-          applyState(candidate);
-        }
-      });
-      return;
-    }
-
-    applyState(token);
-  }
-
   function setHiddenTokenView(note, token, viewState) {
     const nextHinted = viewState === "hinted";
     const nextRevealed = viewState === "revealed";
@@ -1226,6 +1196,32 @@
     applyState(token);
   }
 
+  function setWrongTokenState(note, token, wrongState = !token.wrong) {
+    const applyState = (candidate) => {
+      if (!candidate.hidden) return;
+      candidate.wrong = Boolean(wrongState);
+      if (!candidate.wrong && state.reviewWrongOnly) {
+        candidate.hinted = false;
+        candidate.revealed = false;
+      }
+    };
+
+    if (token.hiddenGroup) {
+      note.tokens.forEach((candidate) => {
+        if (candidate.hiddenGroup === token.hiddenGroup) {
+          applyState(candidate);
+        }
+      });
+      return;
+    }
+
+    applyState(token);
+  }
+
+  function toggleWrongToken(note, token) {
+    setWrongTokenState(note, token, !token.wrong);
+    render();
+  }
   function nextHiddenClickState(token, isTouchLike) {
     if (!isTouchLike) {
       return token.revealed ? "covered" : "revealed";
@@ -1245,13 +1241,15 @@
     shareState.shareId = createId("share");
     shareState.exportedAt = new Date().toISOString();
     shareState.mode = "study";
+    shareState.reviewWrongOnly = false;
     shareState.folders.forEach((folder) => {
       folder.notes.forEach((note) => {
         note.tokens = normalizeSavedTokens(note.text, note.tokens).map((token) => ({
           ...token,
           hinted: false,
           revealed: false,
-          hiddenGroup: token.hidden ? token.hiddenGroup : null
+          hiddenGroup: token.hidden ? token.hiddenGroup : null,
+          wrong: false
         }));
       });
     });
@@ -1280,7 +1278,6 @@
         --muted: #9aa7b4;
         --accent: #7dd3fc;
         --accent-soft: rgba(125, 211, 252, 0.12);
-        --important: #f7c948;
         --highlight-yellow: rgba(244, 211, 94, 0.24);
         --highlight-green: rgba(136, 209, 138, 0.22);
         --highlight-blue: rgba(121, 184, 255, 0.22);
@@ -1425,6 +1422,20 @@
         cursor: pointer;
       }
 
+      #wrong-only.active {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .token.wrong {
+        text-decoration-line: underline;
+        text-decoration-style: dotted;
+        text-decoration-color: #f87171;
+        text-decoration-thickness: 2px;
+        text-underline-offset: 0.32em;
+      }
+
       .token.covered {
         background: transparent;
         color: transparent;
@@ -1440,20 +1451,6 @@
 
       .token.hidden.revealed {
         user-select: none;
-      }
-
-      .token.important:not(.covered):not(.hinted) {
-        box-shadow: inset 0 -2px 0 var(--important);
-      }
-
-      .token.important.covered {
-        box-shadow:
-          inset 0 -1px 0 rgba(237, 241, 244, 0.55),
-          inset 0 -3px 0 var(--important);
-      }
-
-      .token.important.hinted {
-        box-shadow: inset 0 -2px 0 var(--important);
       }
 
       .token.highlight-yellow:not(.covered):not(.hinted) {
@@ -1562,6 +1559,7 @@
         <button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="folders">Notes</button>
         <div id="note-title" class="note-title"></div>
         <button id="hide-revealed" type="button">Hide revealed</button>
+        <button id="wrong-only" type="button" aria-pressed="false">Wrong only</button>
       </header>
       <article id="study-view" class="study-view" tabindex="0" aria-label="Study note"></article>
     </main>
@@ -1574,6 +1572,7 @@
         const titleEl = document.getElementById('note-title');
         const studyView = document.getElementById('study-view');
         const hideRevealedBtn = document.getElementById('hide-revealed');
+        const wrongOnlyBtn = document.getElementById('wrong-only');
         const navToggleBtn = document.getElementById('nav-toggle');
         const drawerOverlay = document.getElementById('drawer-overlay');
         let state = loadState();
@@ -1643,13 +1642,18 @@
 
         function tokenClass(token) {
           const classes = ['token'];
+          const reviewHidden = shouldReviewHiddenToken(token);
           if (token.hidden) classes.push('hidden');
-          if (token.hidden && !token.revealed && !token.hinted) classes.push('covered');
-          if (token.hidden && !token.revealed && token.hinted) classes.push('hinted');
-          if (token.revealed) classes.push('revealed');
-          if (token.important) classes.push('important');
+          if (token.wrong) classes.push('wrong');
+          if (reviewHidden && !token.revealed && !token.hinted) classes.push('covered');
+          if (reviewHidden && !token.revealed && token.hinted) classes.push('hinted');
+          if (token.revealed || (token.hidden && !reviewHidden)) classes.push('revealed');
           if (token.highlight) classes.push('highlight-' + token.highlight);
           return classes.join(' ');
+        }
+
+        function shouldReviewHiddenToken(token) {
+          return Boolean(token.hidden && (!state.reviewWrongOnly || token.wrong));
         }
 
         function setHiddenTokenView(note, token, viewState) {
@@ -1673,6 +1677,32 @@
           applyState(token);
         }
 
+        function setWrongTokenState(note, token, wrongState) {
+          const applyState = function (candidate) {
+            if (!candidate.hidden) return;
+            candidate.wrong = Boolean(wrongState);
+            if (!candidate.wrong && state.reviewWrongOnly) {
+              candidate.hinted = false;
+              candidate.revealed = false;
+            }
+          };
+
+          if (token.hiddenGroup) {
+            note.tokens.forEach(function (candidate) {
+              if (candidate.hiddenGroup === token.hiddenGroup) {
+                applyState(candidate);
+              }
+            });
+            return;
+          }
+
+          applyState(token);
+        }
+
+        function toggleWrongToken(note, token) {
+          setWrongTokenState(note, token, !token.wrong);
+          render();
+        }
         function nextHiddenClickState(token, isTouchLike) {
           if (!isTouchLike) {
             return token.revealed ? 'covered' : 'revealed';
@@ -1746,6 +1776,8 @@
         function render() {
           renderNavigation();
           renderNote();
+          wrongOnlyBtn.classList.toggle('active', Boolean(state.reviewWrongOnly));
+          wrongOnlyBtn.setAttribute('aria-pressed', String(Boolean(state.reviewWrongOnly)));
           saveState();
         }
 
@@ -1789,6 +1821,14 @@
             return;
           }
 
+          if (event.shiftKey) {
+            event.preventDefault();
+            toggleWrongToken(note, token);
+            return;
+          }
+
+          if (!shouldReviewHiddenToken(token)) return;
+
           const isTouchLike = lastPointerType !== 'mouse' || window.matchMedia('(pointer: coarse)').matches;
           setHiddenTokenView(note, token, nextHiddenClickState(token, isTouchLike));
           render();
@@ -1812,7 +1852,11 @@
           clearTimeout(longPressTimer);
           longPressHandled = false;
           longPressTimer = setTimeout(function () {
-            setHiddenTokenView(note, token, 'revealed');
+            if (token.revealed) {
+              setWrongTokenState(note, token, !token.wrong);
+            } else {
+              setHiddenTokenView(note, token, 'revealed');
+            }
             longPressHandled = true;
             render();
           }, 520);
@@ -1822,6 +1866,23 @@
           studyView.addEventListener(eventName, function () {
             clearTimeout(longPressTimer);
           });
+        });
+
+        studyView.addEventListener('auxclick', function (event) {
+          if (event.button !== 1) return;
+          const tokenEl = event.target.closest('.token.hidden');
+          if (!tokenEl) return;
+
+          event.preventDefault();
+          const note = currentNote();
+          if (!note) return;
+
+          const token = note.tokens.find(function (candidate) {
+            return candidate.id === tokenEl.dataset.tokenId;
+          });
+          if (!token) return;
+
+          toggleWrongToken(note, token);
         });
 
         studyView.addEventListener('contextmenu', function (event) {
@@ -1837,8 +1898,10 @@
           });
           if (!token) return;
 
-          setHiddenTokenView(note, token, token.hinted && !token.revealed ? 'covered' : 'hinted');
-          render();
+          if (shouldReviewHiddenToken(token)) {
+            setHiddenTokenView(note, token, token.hinted && !token.revealed ? 'covered' : 'hinted');
+            render();
+          }
         });
 
         hideRevealedBtn.addEventListener('click', function () {
@@ -1850,6 +1913,20 @@
               token.revealed = false;
             }
           });
+          render();
+        });
+
+        wrongOnlyBtn.addEventListener('click', function () {
+          state.reviewWrongOnly = !state.reviewWrongOnly;
+          const note = currentNote();
+          if (state.reviewWrongOnly && note) {
+            note.tokens.forEach(function (token) {
+              if (token.hidden && token.wrong) {
+                token.hinted = false;
+                token.revealed = false;
+              }
+            });
+          }
           render();
         });
 
@@ -1873,13 +1950,15 @@
     publicState.shareId = createId("data");
     publicState.publishedAt = new Date().toISOString();
     publicState.mode = "study";
+    publicState.reviewWrongOnly = false;
     publicState.folders.forEach((folder) => {
       folder.notes.forEach((note) => {
         note.tokens = normalizeSavedTokens(note.text, note.tokens).map((token) => ({
           ...token,
           hinted: false,
           revealed: false,
-          hiddenGroup: token.hidden ? token.hiddenGroup : null
+          hiddenGroup: token.hidden ? token.hiddenGroup : null,
+          wrong: false
         }));
       });
     });
@@ -2233,17 +2312,20 @@
 
     activeTokenId = mode === "mark" ? token.id : null;
     cachedSelectionParts = [];
-    if (mode === "study" && studyImportantMode) {
-      toggleTokenImportant(note, token);
-      render();
-      return;
-    }
     if (token.hidden) {
       if (longPressHandled) {
         longPressHandled = false;
         return;
       }
-      setHiddenTokenView(note, token, nextHiddenClickState(token, isTouchLikeClick()));
+      if (mode === "study" && event.shiftKey) {
+        event.preventDefault();
+        toggleWrongToken(note, token);
+        updateMarkActions();
+        return;
+      }
+      if (shouldReviewHiddenToken(token)) {
+        setHiddenTokenView(note, token, nextHiddenClickState(token, isTouchLikeClick()));
+      }
     }
     render();
     updateMarkActions();
@@ -2252,10 +2334,6 @@
   studyView.addEventListener("pointerdown", (event) => {
     lastPointerType = event.pointerType || "mouse";
     if (mode === "edit") return;
-    if (mode === "study" && studyImportantMode) {
-      focusWithoutScroll(studyView);
-      return;
-    }
     if (mode === "study" && event.pointerType !== "mouse") {
       const tokenEl = event.target.closest(".token.hidden");
       if (tokenEl) {
@@ -2265,7 +2343,11 @@
           clearTimeout(longPressTimer);
           longPressHandled = false;
           longPressTimer = setTimeout(() => {
-            setHiddenTokenView(note, token, "revealed");
+            if (token.revealed) {
+              setWrongTokenState(note, token, !token.wrong);
+            } else {
+              setHiddenTokenView(note, token, "revealed");
+            }
             longPressHandled = true;
             render();
           }, 520);
@@ -2328,6 +2410,18 @@
     longPressHandled = false;
   });
 
+  studyView.addEventListener("auxclick", (event) => {
+    if (mode !== "study" || event.button !== 1) return;
+    const tokenEl = event.target.closest(".token.hidden");
+    if (!tokenEl) return;
+
+    event.preventDefault();
+    const note = currentNote();
+    const token = note?.tokens.find((candidate) => candidate.id === tokenEl.dataset.tokenId);
+    if (!token) return;
+
+    toggleWrongToken(note, token);
+  });
   studyView.addEventListener("contextmenu", (event) => {
     if (mode !== "study") return;
     const tokenEl = event.target.closest(".token.hidden");
@@ -2391,7 +2485,21 @@
   newNoteBtn.addEventListener("click", () => createNote(""));
   deleteNoteBtn.addEventListener("click", deleteCurrentNote);
   hideRevealedBtn.addEventListener("click", hideRevealedWords);
-  markImportantBtn.addEventListener("click", toggleStudyImportantMode);
+  wrongOnlyBtn.addEventListener("click", () => {
+    if (mode !== "study") return;
+    state.reviewWrongOnly = !state.reviewWrongOnly;
+    const note = currentNote();
+    if (state.reviewWrongOnly && note) {
+      note.tokens.forEach((token) => {
+        if (token.hidden && token.wrong) {
+          token.hinted = false;
+          token.revealed = false;
+        }
+      });
+    }
+    render();
+    setMode(mode);
+  });
   exportShareBtn.addEventListener("click", exportSharePage);
   publishJsonBtn.addEventListener("click", publishJsonData);
   markHideBtn.addEventListener("click", hideSelected);

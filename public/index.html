@@ -19,6 +19,8 @@
         --highlight-green: rgba(136, 209, 138, 0.22);
         --highlight-blue: rgba(121, 184, 255, 0.22);
         --highlight-pink: rgba(244, 160, 200, 0.22);
+        --danger: #fb7185;
+        --danger-soft: rgba(251, 113, 133, 0.12);
       }
 
       * { box-sizing: border-box; }
@@ -162,6 +164,19 @@
       }
 
       .token.hidden.revealed { user-select: none; }
+      #wrong-only.active {
+        border-color: var(--danger);
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .token.wrong {
+        text-decoration-line: underline;
+        text-decoration-style: dotted;
+        text-decoration-color: var(--danger);
+        text-decoration-thickness: 2px;
+        text-underline-offset: 0.32em;
+      }
       .token.highlight-yellow:not(.covered):not(.hinted) { background: var(--highlight-yellow); }
       .token.highlight-green:not(.covered):not(.hinted) { background: var(--highlight-green); }
       .token.highlight-blue:not(.covered):not(.hinted) { background: var(--highlight-blue); }
@@ -214,7 +229,8 @@
         }
 
         .note-title { font-size: 16px; }
-        #hide-revealed { flex: 0 0 auto; }
+        #hide-revealed,
+        #wrong-only { flex: 0 0 auto; }
         .study-view { padding: 18px; font-size: 17px; }
       }
     </style>
@@ -231,6 +247,7 @@
         <button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="folders">Notes</button>
         <div id="note-title" class="note-title">Clozeit</div>
         <button id="hide-revealed" type="button">Hide revealed</button>
+        <button id="wrong-only" type="button" aria-pressed="false">Wrong only</button>
       </header>
       <article id="study-view" class="study-view" tabindex="0" aria-label="Study note"><p class="status">Loading...</p></article>
     </main>
@@ -242,6 +259,7 @@
         const titleEl = document.getElementById('note-title');
         const studyView = document.getElementById('study-view');
         const hideRevealedBtn = document.getElementById('hide-revealed');
+        const wrongOnlyBtn = document.getElementById('wrong-only');
         const navToggleBtn = document.getElementById('nav-toggle');
         const drawerOverlay = document.getElementById('drawer-overlay');
         let sourceState = null;
@@ -260,9 +278,14 @@
         function loadLocalState() {
           try {
             const saved = JSON.parse(localStorage.getItem(storageKey()));
-            if (saved && saved.shareId === sourceState.shareId && Array.isArray(saved.folders)) return saved;
+            if (saved && saved.shareId === sourceState.shareId && Array.isArray(saved.folders)) {
+              saved.reviewWrongOnly = Boolean(saved.reviewWrongOnly);
+              return saved;
+            }
           } catch (error) {}
-          return clone(sourceState);
+          const nextState = clone(sourceState);
+          nextState.reviewWrongOnly = false;
+          return nextState;
         }
 
         function saveState() {
@@ -295,12 +318,18 @@
 
         function tokenClass(token) {
           const classes = ['token'];
+          const reviewHidden = shouldReviewHiddenToken(token);
           if (token.hidden) classes.push('hidden');
-          if (token.hidden && !token.revealed && !token.hinted) classes.push('covered');
-          if (token.hidden && !token.revealed && token.hinted) classes.push('hinted');
-          if (token.revealed) classes.push('revealed');
+          if (token.wrong) classes.push('wrong');
+          if (reviewHidden && !token.revealed && !token.hinted) classes.push('covered');
+          if (reviewHidden && !token.revealed && token.hinted) classes.push('hinted');
+          if (token.revealed || (token.hidden && !reviewHidden)) classes.push('revealed');
           if (token.highlight) classes.push('highlight-' + token.highlight);
           return classes.join(' ');
+        }
+
+        function shouldReviewHiddenToken(token) {
+          return Boolean(token.hidden && (!state.reviewWrongOnly || token.wrong));
         }
 
         function setHiddenTokenView(note, token, viewState) {
@@ -319,6 +348,30 @@
             return;
           }
           applyState(token);
+        }
+
+        function setWrongTokenState(note, token, wrongState) {
+          const applyState = function (candidate) {
+            if (!candidate.hidden) return;
+            candidate.wrong = Boolean(wrongState);
+            if (!candidate.wrong && state.reviewWrongOnly) {
+              candidate.hinted = false;
+              candidate.revealed = false;
+            }
+          };
+
+          if (token.hiddenGroup) {
+            note.tokens.forEach(function (candidate) {
+              if (candidate.hiddenGroup === token.hiddenGroup) applyState(candidate);
+            });
+            return;
+          }
+          applyState(token);
+        }
+
+        function toggleWrongToken(note, token) {
+          setWrongTokenState(note, token, !token.wrong);
+          render();
         }
 
         function nextHiddenClickState(token, isTouchLike) {
@@ -390,6 +443,8 @@
         function render() {
           renderNavigation();
           renderNote();
+          wrongOnlyBtn.classList.toggle('active', Boolean(state.reviewWrongOnly));
+          wrongOnlyBtn.setAttribute('aria-pressed', String(Boolean(state.reviewWrongOnly)));
           saveState();
         }
 
@@ -429,6 +484,12 @@
             longPressHandled = false;
             return;
           }
+          if (event.shiftKey) {
+            event.preventDefault();
+            toggleWrongToken(note, token);
+            return;
+          }
+          if (!shouldReviewHiddenToken(token)) return;
           const isTouchLike = lastPointerType !== 'mouse' || window.matchMedia('(pointer: coarse)').matches;
           setHiddenTokenView(note, token, nextHiddenClickState(token, isTouchLike));
           render();
@@ -445,7 +506,11 @@
           clearTimeout(longPressTimer);
           longPressHandled = false;
           longPressTimer = setTimeout(function () {
-            setHiddenTokenView(note, token, 'revealed');
+            if (token.revealed) {
+              setWrongTokenState(note, token, !token.wrong);
+            } else {
+              setHiddenTokenView(note, token, 'revealed');
+            }
             longPressHandled = true;
             render();
           }, 520);
@@ -455,6 +520,17 @@
           studyView.addEventListener(eventName, function () { clearTimeout(longPressTimer); });
         });
 
+        studyView.addEventListener('auxclick', function (event) {
+          if (event.button !== 1) return;
+          const tokenEl = event.target.closest('.token.hidden');
+          if (!tokenEl || !state) return;
+          event.preventDefault();
+          const note = currentNote();
+          const token = note.tokens.find(function (candidate) { return candidate.id === tokenEl.dataset.tokenId; });
+          if (!token) return;
+          toggleWrongToken(note, token);
+        });
+
         studyView.addEventListener('contextmenu', function (event) {
           const tokenEl = event.target.closest('.token.hidden');
           event.preventDefault();
@@ -462,8 +538,10 @@
           const note = currentNote();
           const token = note.tokens.find(function (candidate) { return candidate.id === tokenEl.dataset.tokenId; });
           if (!token) return;
-          setHiddenTokenView(note, token, token.hinted && !token.revealed ? 'covered' : 'hinted');
-          render();
+          if (shouldReviewHiddenToken(token)) {
+            setHiddenTokenView(note, token, token.hinted && !token.revealed ? 'covered' : 'hinted');
+            render();
+          }
         });
 
         hideRevealedBtn.addEventListener('click', function () {
@@ -476,6 +554,21 @@
               token.revealed = false;
             }
           });
+          render();
+        });
+
+        wrongOnlyBtn.addEventListener('click', function () {
+          if (!state) return;
+          state.reviewWrongOnly = !state.reviewWrongOnly;
+          const note = currentNote();
+          if (state.reviewWrongOnly && note) {
+            note.tokens.forEach(function (token) {
+              if (token.hidden && token.wrong) {
+                token.hinted = false;
+                token.revealed = false;
+              }
+            });
+          }
           render();
         });
 
