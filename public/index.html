@@ -15,10 +15,10 @@
         --muted: #9aa7b4;
         --accent: #7dd3fc;
         --accent-soft: rgba(125, 211, 252, 0.12);
-        --highlight-yellow: rgba(244, 211, 94, 0.24);
-        --highlight-green: rgba(136, 209, 138, 0.22);
-        --highlight-blue: rgba(121, 184, 255, 0.22);
-        --highlight-pink: rgba(244, 160, 200, 0.22);
+        --highlight-yellow: rgba(244, 211, 94, 0.38);
+        --highlight-green: rgba(136, 209, 138, 0.34);
+        --highlight-blue: rgba(121, 184, 255, 0.34);
+        --highlight-pink: rgba(244, 160, 200, 0.34);
         --danger: #fb7185;
         --danger-soft: rgba(251, 113, 133, 0.12);
       }
@@ -177,10 +177,17 @@
         text-decoration-thickness: 2px;
         text-underline-offset: 0.32em;
       }
-      .token.highlight-yellow:not(.covered):not(.hinted) { background: var(--highlight-yellow); }
-      .token.highlight-green:not(.covered):not(.hinted) { background: var(--highlight-green); }
-      .token.highlight-blue:not(.covered):not(.hinted) { background: var(--highlight-blue); }
-      .token.highlight-pink:not(.covered):not(.hinted) { background: var(--highlight-pink); }
+      .token.highlight-yellow:not(.covered):not(.hinted),
+      .token.highlight-green:not(.covered):not(.hinted),
+      .token.highlight-blue:not(.covered):not(.hinted),
+      .token.highlight-pink:not(.covered):not(.hinted) {
+        -webkit-box-decoration-break: clone;
+        box-decoration-break: clone;
+      }
+      .token.highlight-yellow:not(.covered):not(.hinted) { background: linear-gradient(to top, var(--highlight-yellow) 0 58%, transparent 58%); }
+      .token.highlight-green:not(.covered):not(.hinted) { background: linear-gradient(to top, var(--highlight-green) 0 58%, transparent 58%); }
+      .token.highlight-blue:not(.covered):not(.hinted) { background: linear-gradient(to top, var(--highlight-blue) 0 58%, transparent 58%); }
+      .token.highlight-pink:not(.covered):not(.hinted) { background: linear-gradient(to top, var(--highlight-pink) 0 58%, transparent 58%); }
 
       .empty,
       .status { color: var(--muted); }
@@ -317,7 +324,7 @@
         }
 
         function tokenClass(token) {
-          const classes = ['token'];
+          const classes = ['token', token.isSpace ? 'space' : 'word'];
           const reviewHidden = shouldReviewHiddenToken(token);
           if (token.hidden) classes.push('hidden');
           if (token.wrong) classes.push('wrong');
@@ -428,7 +435,7 @@
           }
 
           note.tokens.forEach(function (token) {
-            if (token.isSpace) {
+            if (token.isSpace && !token.highlight) {
               studyView.appendChild(document.createTextNode(token.value));
               return;
             }

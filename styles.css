@@ -13,10 +13,10 @@
   --edit: #f0b66f;
   --edit-soft: #3b2816;
   --danger: #ff8d86;
-  --highlight-yellow: rgba(244, 211, 94, 0.3);
-  --highlight-green: rgba(136, 209, 138, 0.28);
-  --highlight-blue: rgba(121, 184, 255, 0.28);
-  --highlight-pink: rgba(244, 160, 200, 0.28);
+  --highlight-yellow: rgba(244, 211, 94, 0.42);
+  --highlight-green: rgba(136, 209, 138, 0.38);
+  --highlight-blue: rgba(121, 184, 255, 0.38);
+  --highlight-pink: rgba(244, 160, 200, 0.38);
 }
 
 * {
@@ -245,15 +245,25 @@ body.mode-study .mode-switch button.active {
 }
 
 .color-button {
+  position: relative;
   width: 28px;
   min-height: 28px;
   padding: 0;
+  border-color: rgba(237, 241, 244, 0.18);
   border-radius: 5px;
+  outline: 0;
 }
 
 .color-button.active {
-  outline: 2px solid var(--text);
-  outline-offset: 1px;
+  border-color: rgba(237, 241, 244, 0.7);
+  box-shadow:
+    inset 0 0 0 3px var(--bg),
+    0 0 0 1px rgba(237, 241, 244, 0.55);
+}
+
+.color-button:focus-visible {
+  outline: 2px solid rgba(237, 241, 244, 0.55);
+  outline-offset: 2px;
 }
 
 .color-yellow {
@@ -415,24 +425,29 @@ body.mode-mark .token.word:hover {
   box-shadow: inset 0 -2px 0 rgba(237, 241, 244, 0.75);
 }
 
-.token.highlight-yellow:not(.covered):not(.hinted) {
-  background: var(--highlight-yellow);
+.token.highlight-yellow:not(.covered):not(.hinted),
+.token.highlight-green:not(.covered):not(.hinted),
+.token.highlight-blue:not(.covered):not(.hinted),
+.token.highlight-pink:not(.covered):not(.hinted) {
   color: var(--text);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.token.highlight-yellow:not(.covered):not(.hinted) {
+  background: linear-gradient(to top, var(--highlight-yellow) 0 58%, transparent 58%);
 }
 
 .token.highlight-green:not(.covered):not(.hinted) {
-  background: var(--highlight-green);
-  color: var(--text);
+  background: linear-gradient(to top, var(--highlight-green) 0 58%, transparent 58%);
 }
 
 .token.highlight-blue:not(.covered):not(.hinted) {
-  background: var(--highlight-blue);
-  color: var(--text);
+  background: linear-gradient(to top, var(--highlight-blue) 0 58%, transparent 58%);
 }
 
 .token.highlight-pink:not(.covered):not(.hinted) {
-  background: var(--highlight-pink);
-  color: var(--text);
+  background: linear-gradient(to top, var(--highlight-pink) 0 58%, transparent 58%);
 }
 
 

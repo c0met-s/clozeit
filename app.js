@@ -300,7 +300,6 @@
         token.hiddenGroup = null;
         token.hinted = false;
         token.revealed = false;
-        token.highlight = null;
       }
     });
     return tokens.filter((token) => token.value.length > 0);
@@ -514,7 +513,7 @@
     }
 
     note.tokens.forEach((token) => {
-      if (token.isSpace) {
+      if (token.isSpace && !token.highlight) {
         studyView.appendChild(document.createTextNode(token.value));
         return;
       }
@@ -529,7 +528,7 @@
   }
 
   function tokenClass(token) {
-    const classes = ["token", "word"];
+    const classes = ["token", token.isSpace ? "space" : "word"];
     const reviewHidden = shouldReviewHiddenToken(token);
     if (mode === "mark" && token.id === activeTokenId) {
       classes.push("selected");
@@ -1089,9 +1088,20 @@
     const context = {
       hiddenGroup: options.groupWhenMultiple && partsById.size > 1 ? createId("group") : null
     };
+    const selectedIndexes = note.tokens
+      .map((token, index) => (partsById.has(token.id) ? index : -1))
+      .filter((index) => index >= 0);
+    const firstSelectedIndex = Math.min(...selectedIndexes);
+    const lastSelectedIndex = Math.max(...selectedIndexes);
+
     const nextTokens = [];
-    note.tokens.forEach((token) => {
+    note.tokens.forEach((token, index) => {
       const part = partsById.get(token.id);
+      if (token.isSpace && options.includeBetweenSpaces && index > firstSelectedIndex && index < lastSelectedIndex) {
+        action(token, context);
+        nextTokens.push(token);
+        return;
+      }
       if (!part || token.isSpace) {
         nextTokens.push(token);
         return;
@@ -1148,13 +1158,12 @@
   function toggleHighlight() {
     applyToSelectedTokens((token) => {
       token.highlight = token.highlight === state.highlightColor ? null : state.highlightColor;
-    });
+    }, { includeBetweenSpaces: true });
   }
 
   function clearHighlight() {
     applyToSelectedTokens((token) => {
-      token.highlight = null;
-    });
+    }, { includeBetweenSpaces: true });
   }
 
   function hideRevealedWords() {
@@ -1278,10 +1287,10 @@
         --muted: #9aa7b4;
         --accent: #7dd3fc;
         --accent-soft: rgba(125, 211, 252, 0.12);
-        --highlight-yellow: rgba(244, 211, 94, 0.24);
-        --highlight-green: rgba(136, 209, 138, 0.22);
-        --highlight-blue: rgba(121, 184, 255, 0.22);
-        --highlight-pink: rgba(244, 160, 200, 0.22);
+        --highlight-yellow: rgba(244, 211, 94, 0.38);
+        --highlight-green: rgba(136, 209, 138, 0.34);
+        --highlight-blue: rgba(121, 184, 255, 0.34);
+        --highlight-pink: rgba(244, 160, 200, 0.34);
       }
 
       * {
@@ -1453,20 +1462,28 @@
         user-select: none;
       }
 
+      .token.highlight-yellow:not(.covered):not(.hinted),
+      .token.highlight-green:not(.covered):not(.hinted),
+      .token.highlight-blue:not(.covered):not(.hinted),
+      .token.highlight-pink:not(.covered):not(.hinted) {
+        -webkit-box-decoration-break: clone;
+        box-decoration-break: clone;
+      }
+
       .token.highlight-yellow:not(.covered):not(.hinted) {
-        background: var(--highlight-yellow);
+        background: linear-gradient(to top, var(--highlight-yellow) 0 58%, transparent 58%);
       }
 
       .token.highlight-green:not(.covered):not(.hinted) {
-        background: var(--highlight-green);
+        background: linear-gradient(to top, var(--highlight-green) 0 58%, transparent 58%);
       }
 
       .token.highlight-blue:not(.covered):not(.hinted) {
-        background: var(--highlight-blue);
+        background: linear-gradient(to top, var(--highlight-blue) 0 58%, transparent 58%);
       }
 
       .token.highlight-pink:not(.covered):not(.hinted) {
-        background: var(--highlight-pink);
+        background: linear-gradient(to top, var(--highlight-pink) 0 58%, transparent 58%);
       }
 
       .empty {
@@ -1641,7 +1658,7 @@
         }
 
         function tokenClass(token) {
-          const classes = ['token'];
+          const classes = ['token', token.isSpace ? 'space' : 'word'];
           const reviewHidden = shouldReviewHiddenToken(token);
           if (token.hidden) classes.push('hidden');
           if (token.wrong) classes.push('wrong');
@@ -1760,7 +1777,7 @@
           }
 
           note.tokens.forEach(function (token) {
-            if (token.isSpace) {
+            if (token.isSpace && !token.highlight) {
               studyView.appendChild(document.createTextNode(token.value));
               return;
             }
