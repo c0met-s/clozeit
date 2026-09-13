@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Clozeit</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <aside class="sidebar" aria-label="Notes navigation">
+      <header class="sidebar-header">
+        <h1>Clozeit</h1>
+        <button id="add-folder" type="button" title="New folder">+</button>
+      </header>
+      <div id="folders" class="folders" role="list"></div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <input id="note-title" type="text" aria-label="Note title" autocomplete="off">
+        <div class="actions">
+          <div class="mode-switch" aria-label="Mode">
+            <button id="mode-edit" type="button" data-mode="edit">Edit</button>
+            <button id="mode-mark" type="button" data-mode="mark">Mark</button>
+            <button id="mode-study" type="button" data-mode="study">Study</button>
+          </div>
+          <div class="mark-actions" aria-label="Mark selected words">
+            <button id="mark-hide" type="button">1 Hide</button>
+            <button id="mark-unhide" type="button">2 Unhide</button>
+            <button id="mark-highlight" type="button">3 Highlight</button>
+            <button id="mark-clear" type="button">Clear</button>
+          </div>
+          <button id="hide-revealed" type="button">Hide revealed</button>
+          <button id="mark-important" type="button" aria-pressed="false">Mark important</button>
+          <button id="export-share" type="button">Export share page</button>
+          <button id="publish-json" type="button">Publish JSON</button>
+          <div class="color-switch" aria-label="Highlight color">
+            <button class="color-button color-yellow" type="button" data-color="yellow" title="Yellow highlight"></button>
+            <button class="color-button color-green" type="button" data-color="green" title="Green highlight"></button>
+            <button class="color-button color-blue" type="button" data-color="blue" title="Blue highlight"></button>
+            <button class="color-button color-pink" type="button" data-color="pink" title="Pink highlight"></button>
+          </div>
+          <button id="new-note" type="button">New note</button>
+          <button id="delete-note" type="button">Delete</button>
+        </div>
+      </header>
+
+      <div id="mode-banner" class="mode-banner" aria-live="polite">
+        <strong id="mode-label"></strong>
+        <span id="mode-detail"></span>
+      </div>
+
+      <section class="editor-shell">
+        <textarea id="raw-editor" class="raw-editor" aria-label="Raw note text" spellcheck="false"></textarea>
+        <article id="study-view" class="study-view" tabindex="0" aria-label="Study note"></article>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

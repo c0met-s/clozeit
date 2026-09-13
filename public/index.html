@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Clozeit</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0f14;
+        --panel: #121820;
+        --line: #26313d;
+        --text: #eef2f6;
+        --muted: #9aa7b4;
+        --accent: #7dd3fc;
+        --accent-soft: rgba(125, 211, 252, 0.12);
+        --highlight-yellow: rgba(244, 211, 94, 0.24);
+        --highlight-green: rgba(136, 209, 138, 0.22);
+        --highlight-blue: rgba(121, 184, 255, 0.22);
+        --highlight-pink: rgba(244, 160, 200, 0.22);
+      }
+
+      * { box-sizing: border-box; }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        display: grid;
+        grid-template-columns: minmax(190px, 260px) minmax(0, 1fr);
+        background: var(--bg);
+        color: var(--text);
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      button {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        min-height: 34px;
+        padding: 6px 10px;
+        background: #151c25;
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button:hover,
+      button.active {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .sidebar {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--line);
+        background: var(--panel);
+      }
+
+      .sidebar-header,
+      .topbar {
+        min-height: 58px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      h1 { margin: 0; font-size: 18px; }
+
+      .folders {
+        min-height: 0;
+        overflow: auto;
+        padding: 10px;
+      }
+
+      .folder { margin-bottom: 12px; }
+
+      .folder-name {
+        margin: 2px 0 6px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .note-row {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 5px;
+        text-align: left;
+      }
+
+      .count { color: var(--muted); }
+
+      .workspace {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .note-title {
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .study-view {
+        min-height: 0;
+        flex: 1;
+        overflow: auto;
+        padding: 28px;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 19px;
+        line-height: 1.8;
+        white-space: pre-wrap;
+        tab-size: 4;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      .token {
+        border-radius: 2px;
+        display: inline;
+        line-height: inherit;
+        padding: 0;
+        color: inherit;
+      }
+
+      .token.covered,
+      .token.hinted,
+      .token.hidden.revealed { cursor: pointer; }
+
+      .token.covered {
+        background: transparent;
+        color: transparent;
+        box-shadow: inset 0 -1px 0 rgba(237, 241, 244, 0.55);
+      }
+
+      .token.hinted {
+        color: rgba(237, 241, 244, 0.82);
+        filter: blur(3px);
+        text-shadow: 0 0 8px rgba(237, 241, 244, 0.42);
+        user-select: none;
+      }
+
+      .token.hidden.revealed { user-select: none; }
+      .token.highlight-yellow:not(.covered):not(.hinted) { background: var(--highlight-yellow); }
+      .token.highlight-green:not(.covered):not(.hinted) { background: var(--highlight-green); }
+      .token.highlight-blue:not(.covered):not(.hinted) { background: var(--highlight-blue); }
+      .token.highlight-pink:not(.covered):not(.hinted) { background: var(--highlight-pink); }
+
+      .empty,
+      .status { color: var(--muted); }
+
+      .nav-toggle,
+      .drawer-overlay { display: none; }
+
+      @media (max-width: 720px) {
+        body {
+          grid-template-columns: 1fr;
+          grid-template-rows: minmax(0, 1fr);
+        }
+
+        .sidebar {
+          position: fixed;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          z-index: 20;
+          width: min(84vw, 320px);
+          transform: translateX(-100%);
+          transition: transform 160ms ease;
+          border-right: 1px solid var(--line);
+          box-shadow: 16px 0 40px rgba(0, 0, 0, 0.35);
+        }
+
+        body.nav-open .sidebar { transform: translateX(0); }
+
+        .drawer-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 10;
+          display: block;
+          background: rgba(0, 0, 0, 0.48);
+        }
+
+        .drawer-overlay[hidden] { display: none; }
+        .workspace { min-height: 100vh; }
+        .topbar { min-height: 54px; padding: 10px; }
+
+        .nav-toggle {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .note-title { font-size: 16px; }
+        #hide-revealed { flex: 0 0 auto; }
+        .study-view { padding: 18px; font-size: 17px; }
+      }
+    </style>
+  </head>
+  <body>
+    <aside class="sidebar" aria-label="Notes navigation">
+      <header class="sidebar-header"><h1>Clozeit</h1></header>
+      <div id="folders" class="folders"></div>
+    </aside>
+    <div id="drawer-overlay" class="drawer-overlay" hidden></div>
+
+    <main class="workspace">
+      <header class="topbar">
+        <button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="folders">Notes</button>
+        <div id="note-title" class="note-title">Clozeit</div>
+        <button id="hide-revealed" type="button">Hide revealed</button>
+      </header>
+      <article id="study-view" class="study-view" tabindex="0" aria-label="Study note"><p class="status">Loading...</p></article>
+    </main>
+
+    <script>
+      (function () {
+        const DATA_URL = 'data.json';
+        const foldersEl = document.getElementById('folders');
+        const titleEl = document.getElementById('note-title');
+        const studyView = document.getElementById('study-view');
+        const hideRevealedBtn = document.getElementById('hide-revealed');
+        const navToggleBtn = document.getElementById('nav-toggle');
+        const drawerOverlay = document.getElementById('drawer-overlay');
+        let sourceState = null;
+        let state = null;
+        let lastPointerType = 'mouse';
+        let longPressTimer = null;
+        let longPressHandled = false;
+
+        function clone(value) { return JSON.parse(JSON.stringify(value)); }
+
+        function storageKey() {
+          const id = sourceState && (sourceState.shareId || sourceState.publishedAt || 'current');
+          return 'clozeit-public-study-state-' + id;
+        }
+
+        function loadLocalState() {
+          try {
+            const saved = JSON.parse(localStorage.getItem(storageKey()));
+            if (saved && saved.shareId === sourceState.shareId && Array.isArray(saved.folders)) return saved;
+          } catch (error) {}
+          return clone(sourceState);
+        }
+
+        function saveState() {
+          try { localStorage.setItem(storageKey(), JSON.stringify(state)); } catch (error) {}
+        }
+
+        function isMobileLayout() { return window.matchMedia('(max-width: 720px)').matches; }
+
+        function setDrawerOpen(open) {
+          const nextOpen = Boolean(open) && isMobileLayout();
+          document.body.classList.toggle('nav-open', nextOpen);
+          drawerOverlay.hidden = !nextOpen;
+          navToggleBtn.setAttribute('aria-expanded', String(nextOpen));
+        }
+
+        function currentFolder() {
+          return state.folders.find(function (folder) { return folder.id === state.currentFolderId; }) || state.folders[0];
+        }
+
+        function currentNote() {
+          const folder = currentFolder();
+          if (!folder) return null;
+          return folder.notes.find(function (note) { return note.id === state.currentNoteId; }) || folder.notes[0] || null;
+        }
+
+        function hiddenCount(note) {
+          const count = note.tokens.filter(function (token) { return token.hidden; }).length;
+          return count ? String(count) : '';
+        }
+
+        function tokenClass(token) {
+          const classes = ['token'];
+          if (token.hidden) classes.push('hidden');
+          if (token.hidden && !token.revealed && !token.hinted) classes.push('covered');
+          if (token.hidden && !token.revealed && token.hinted) classes.push('hinted');
+          if (token.revealed) classes.push('revealed');
+          if (token.highlight) classes.push('highlight-' + token.highlight);
+          return classes.join(' ');
+        }
+
+        function setHiddenTokenView(note, token, viewState) {
+          const nextHinted = viewState === 'hinted';
+          const nextRevealed = viewState === 'revealed';
+          const applyState = function (candidate) {
+            if (!candidate.hidden) return;
+            candidate.hinted = nextHinted;
+            candidate.revealed = nextRevealed;
+          };
+
+          if (token.hiddenGroup) {
+            note.tokens.forEach(function (candidate) {
+              if (candidate.hiddenGroup === token.hiddenGroup) applyState(candidate);
+            });
+            return;
+          }
+          applyState(token);
+        }
+
+        function nextHiddenClickState(token, isTouchLike) {
+          if (!isTouchLike) return token.revealed ? 'covered' : 'revealed';
+          if (token.revealed) return 'covered';
+          if (token.hinted) return 'revealed';
+          return 'hinted';
+        }
+
+        function renderNavigation() {
+          foldersEl.replaceChildren();
+          state.folders.forEach(function (folder) {
+            const section = document.createElement('section');
+            section.className = 'folder';
+
+            const name = document.createElement('div');
+            name.className = 'folder-name';
+            name.textContent = folder.name || 'Folder';
+            section.appendChild(name);
+
+            folder.notes.forEach(function (note) {
+              const button = document.createElement('button');
+              button.type = 'button';
+              button.className = 'note-row' + (note.id === state.currentNoteId ? ' active' : '');
+              button.dataset.folderId = folder.id;
+              button.dataset.noteId = note.id;
+
+              const label = document.createElement('span');
+              label.textContent = note.title || 'Untitled';
+              button.appendChild(label);
+
+              const count = document.createElement('span');
+              count.className = 'count';
+              count.textContent = hiddenCount(note);
+              button.appendChild(count);
+
+              section.appendChild(button);
+            });
+            foldersEl.appendChild(section);
+          });
+        }
+
+        function renderNote() {
+          const note = currentNote();
+          studyView.replaceChildren();
+          titleEl.textContent = note ? note.title || 'Untitled' : 'Untitled';
+
+          if (!note || !note.text.trim()) {
+            const empty = document.createElement('p');
+            empty.className = 'empty';
+            empty.textContent = 'No text in this note';
+            studyView.appendChild(empty);
+            return;
+          }
+
+          note.tokens.forEach(function (token) {
+            if (token.isSpace) {
+              studyView.appendChild(document.createTextNode(token.value));
+              return;
+            }
+            const span = document.createElement('span');
+            span.className = tokenClass(token);
+            span.dataset.tokenId = token.id;
+            span.textContent = token.value;
+            studyView.appendChild(span);
+          });
+        }
+
+        function render() {
+          renderNavigation();
+          renderNote();
+          saveState();
+        }
+
+        function showError(message) {
+          titleEl.textContent = 'Clozeit';
+          studyView.replaceChildren();
+          const status = document.createElement('p');
+          status.className = 'status';
+          status.textContent = message;
+          studyView.appendChild(status);
+        }
+
+        foldersEl.addEventListener('click', function (event) {
+          const button = event.target.closest('[data-note-id]');
+          if (!button) return;
+          state.currentFolderId = button.dataset.folderId;
+          state.currentNoteId = button.dataset.noteId;
+          render();
+          setDrawerOpen(false);
+        });
+
+        navToggleBtn.addEventListener('click', function () {
+          setDrawerOpen(!document.body.classList.contains('nav-open'));
+        });
+
+        drawerOverlay.addEventListener('click', function () { setDrawerOpen(false); });
+        window.addEventListener('resize', function () { if (!isMobileLayout()) setDrawerOpen(false); });
+        document.addEventListener('keydown', function (event) { if (event.key === 'Escape') setDrawerOpen(false); });
+
+        studyView.addEventListener('click', function (event) {
+          const tokenEl = event.target.closest('.token.hidden');
+          if (!tokenEl || !state) return;
+          const note = currentNote();
+          const token = note.tokens.find(function (candidate) { return candidate.id === tokenEl.dataset.tokenId; });
+          if (!token) return;
+          if (longPressHandled) {
+            longPressHandled = false;
+            return;
+          }
+          const isTouchLike = lastPointerType !== 'mouse' || window.matchMedia('(pointer: coarse)').matches;
+          setHiddenTokenView(note, token, nextHiddenClickState(token, isTouchLike));
+          render();
+        });
+
+        studyView.addEventListener('pointerdown', function (event) {
+          lastPointerType = event.pointerType || 'mouse';
+          if (event.pointerType === 'mouse' || !state) return;
+          const tokenEl = event.target.closest('.token.hidden');
+          if (!tokenEl) return;
+          const note = currentNote();
+          const token = note.tokens.find(function (candidate) { return candidate.id === tokenEl.dataset.tokenId; });
+          if (!token) return;
+          clearTimeout(longPressTimer);
+          longPressHandled = false;
+          longPressTimer = setTimeout(function () {
+            setHiddenTokenView(note, token, 'revealed');
+            longPressHandled = true;
+            render();
+          }, 520);
+        });
+
+        ['pointerup', 'pointercancel'].forEach(function (eventName) {
+          studyView.addEventListener(eventName, function () { clearTimeout(longPressTimer); });
+        });
+
+        studyView.addEventListener('contextmenu', function (event) {
+          const tokenEl = event.target.closest('.token.hidden');
+          event.preventDefault();
+          if (!tokenEl || !state) return;
+          const note = currentNote();
+          const token = note.tokens.find(function (candidate) { return candidate.id === tokenEl.dataset.tokenId; });
+          if (!token) return;
+          setHiddenTokenView(note, token, token.hinted && !token.revealed ? 'covered' : 'hinted');
+          render();
+        });
+
+        hideRevealedBtn.addEventListener('click', function () {
+          if (!state) return;
+          const note = currentNote();
+          if (!note) return;
+          note.tokens.forEach(function (token) {
+            if (token.hidden) {
+              token.hinted = false;
+              token.revealed = false;
+            }
+          });
+          render();
+        });
+
+        ['copy', 'cut', 'dragstart', 'selectstart'].forEach(function (eventName) {
+          studyView.addEventListener(eventName, function (event) { event.preventDefault(); });
+        });
+
+        fetch(DATA_URL, { cache: 'no-store' })
+          .then(function (response) {
+            if (!response.ok) throw new Error('Missing data.json');
+            return response.json();
+          })
+          .then(function (data) {
+            sourceState = data;
+            state = loadLocalState();
+            if (!Array.isArray(state.folders) || !state.folders.length) throw new Error('Invalid data.json');
+            render();
+          })
+          .catch(function () {
+            showError('No published Clozeit data yet. Publish data.json from the editor.');
+          });
+      })();
+    </script>
+  </body>
+</html>
