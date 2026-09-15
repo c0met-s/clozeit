@@ -278,20 +278,74 @@
         function clone(value) { return JSON.parse(JSON.stringify(value)); }
 
         function storageKey() {
+          return 'clozeit-public-study-progress-v2';
+        }
+
+        function legacyStorageKey() {
           const id = sourceState && (sourceState.shareId || sourceState.publishedAt || 'current');
           return 'clozeit-public-study-state-' + id;
         }
 
+        function readSavedProgress() {
+          const keys = [storageKey(), legacyStorageKey()];
+          for (const key of keys) {
+            try {
+              const saved = JSON.parse(localStorage.getItem(key));
+              if (saved && Array.isArray(saved.folders)) return saved;
+            } catch (error) {}
+          }
+          return null;
+        }
+
+        function tokenProgressMap(savedState) {
+          const progress = new Map();
+          (savedState.folders || []).forEach(function (folder) {
+            (folder.notes || []).forEach(function (note) {
+              const tokenMap = new Map();
+              (note.tokens || []).forEach(function (token) {
+                if (!token || !token.id) return;
+                tokenMap.set(token.id, {
+                  wrong: Boolean(token.wrong),
+                  hinted: Boolean(token.hinted),
+                  revealed: Boolean(token.revealed)
+                });
+              });
+              progress.set(note.id, tokenMap);
+            });
+          });
+          return progress;
+        }
+
+        function applySavedProgress(nextState, savedState) {
+          const progress = tokenProgressMap(savedState);
+          nextState.reviewWrongOnly = Boolean(savedState.reviewWrongOnly);
+          if (nextState.folders.some(function (folder) { return folder.id === savedState.currentFolderId; })) {
+            nextState.currentFolderId = savedState.currentFolderId;
+          }
+          nextState.folders.forEach(function (folder) {
+            folder.notes.forEach(function (note) {
+              const tokenMap = progress.get(note.id);
+              if (!tokenMap) return;
+              note.tokens.forEach(function (token) {
+                const savedToken = tokenMap.get(token.id);
+                if (!savedToken || !token.hidden) return;
+                token.wrong = savedToken.wrong;
+                token.hinted = savedToken.hinted;
+                token.revealed = savedToken.revealed;
+              });
+            });
+          });
+          const currentFolder = nextState.folders.find(function (folder) { return folder.id === nextState.currentFolderId; });
+          if (currentFolder && currentFolder.notes.some(function (note) { return note.id === savedState.currentNoteId; })) {
+            nextState.currentNoteId = savedState.currentNoteId;
+          }
+        }
+
         function loadLocalState() {
-          try {
-            const saved = JSON.parse(localStorage.getItem(storageKey()));
-            if (saved && saved.shareId === sourceState.shareId && Array.isArray(saved.folders)) {
-              saved.reviewWrongOnly = Boolean(saved.reviewWrongOnly);
-              return saved;
-            }
-          } catch (error) {}
           const nextState = clone(sourceState);
           nextState.reviewWrongOnly = false;
+          const saved = readSavedProgress();
+          if (saved) applySavedProgress(nextState, saved);
           return nextState;
         }
 
