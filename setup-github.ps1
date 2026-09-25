@@ -1,11 +1,8 @@
 $ErrorActionPreference = "Stop"
 
-$Git = "C:\Users\study session\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\cmd\git.exe"
+$BundledGit = "C:\Users\study session\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\cmd\git.exe"
+$Git = if (Test-Path -LiteralPath $BundledGit) { $BundledGit } else { "git" }
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-
-if (-not (Test-Path -LiteralPath $Git)) {
-  throw "Git executable was not found at: $Git"
-}
 
 $name = Read-Host "Git user name"
 $email = Read-Host "Git email"

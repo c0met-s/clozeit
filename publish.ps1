@@ -1,11 +1,16 @@
 $ErrorActionPreference = "Stop"
 
-$Git = "C:\Users\study session\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\cmd\git.exe"
+$BundledGit = "C:\Users\study session\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\cmd\git.exe"
+$Git = if (Test-Path -LiteralPath $BundledGit) { $BundledGit } else { "git" }
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ExportData = Join-Path $Root "exports\data.json"
+$PublicData = Join-Path $Root "public\data.json"
 $Stamp = Get-Date -Format "yyMMdd-HHmm"
 
-if (-not (Test-Path -LiteralPath $Git)) {
-  throw "Git executable was not found at: $Git"
+if (Test-Path -LiteralPath $ExportData) {
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $PublicData) | Out-Null
+  Copy-Item -LiteralPath $ExportData -Destination $PublicData -Force
+  Write-Host "Synced exports\data.json -> public\data.json"
 }
 
 & $Git -C $Root add .
