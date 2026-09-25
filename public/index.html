@@ -4,7 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Clozeit</title>
-    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="manifest" href="site.webmanifest">
     <style>
       :root {
         color-scheme: dark;
@@ -147,7 +151,6 @@
       }
 
       .token.covered,
-      .token.hinted,
       .token.hidden.revealed { cursor: pointer; }
 
       .token.covered {
@@ -155,15 +158,7 @@
         color: transparent;
         box-shadow: inset 0 -1px 0 rgba(237, 241, 244, 0.55);
       }
-
-      .token.hinted {
-        color: rgba(237, 241, 244, 0.82);
-        filter: blur(3px);
-        text-shadow: 0 0 8px rgba(237, 241, 244, 0.42);
-        user-select: none;
-      }
-
-      .token.hidden.revealed { user-select: none; }
+.token.hidden.revealed { user-select: none; }
       #wrong-only.active {
         border-color: var(--danger);
         background: var(--danger-soft);
@@ -177,17 +172,17 @@
         text-decoration-thickness: 2px;
         text-underline-offset: 0.32em;
       }
-      .token.highlight-yellow:not(.covered):not(.hinted),
-      .token.highlight-green:not(.covered):not(.hinted),
-      .token.highlight-blue:not(.covered):not(.hinted),
-      .token.highlight-pink:not(.covered):not(.hinted) {
+      .token.highlight-yellow:not(.covered),
+      .token.highlight-green:not(.covered),
+      .token.highlight-blue:not(.covered),
+      .token.highlight-pink:not(.covered) {
         -webkit-box-decoration-break: clone;
         box-decoration-break: clone;
       }
-      .token.highlight-yellow:not(.covered):not(.hinted) { background: linear-gradient(to top, var(--highlight-yellow) 0 58%, transparent 58%); }
-      .token.highlight-green:not(.covered):not(.hinted) { background: linear-gradient(to top, var(--highlight-green) 0 58%, transparent 58%); }
-      .token.highlight-blue:not(.covered):not(.hinted) { background: linear-gradient(to top, var(--highlight-blue) 0 58%, transparent 58%); }
-      .token.highlight-pink:not(.covered):not(.hinted) { background: linear-gradient(to top, var(--highlight-pink) 0 58%, transparent 58%); }
+      .token.highlight-yellow:not(.covered) { background: linear-gradient(to top, var(--highlight-yellow) 0 58%, transparent 58%); }
+      .token.highlight-green:not(.covered) { background: linear-gradient(to top, var(--highlight-green) 0 58%, transparent 58%); }
+      .token.highlight-blue:not(.covered) { background: linear-gradient(to top, var(--highlight-blue) 0 58%, transparent 58%); }
+      .token.highlight-pink:not(.covered) { background: linear-gradient(to top, var(--highlight-pink) 0 58%, transparent 58%); }
 
       .empty,
       .status { color: var(--muted); }
@@ -382,8 +377,7 @@
           const reviewHidden = shouldReviewHiddenToken(token);
           if (token.hidden) classes.push('hidden');
           if (token.wrong) classes.push('wrong');
-          if (reviewHidden && !token.revealed && !token.hinted) classes.push('covered');
-          if (reviewHidden && !token.revealed && token.hinted) classes.push('hinted');
+          if (reviewHidden && !token.revealed) classes.push('covered');
           if (token.revealed || (token.hidden && !reviewHidden)) classes.push('revealed');
           if (token.highlight) classes.push('highlight-' + token.highlight);
           return classes.join(' ');
@@ -394,11 +388,10 @@
         }
 
         function setHiddenTokenView(note, token, viewState) {
-          const nextHinted = viewState === 'hinted';
           const nextRevealed = viewState === 'revealed';
           const applyState = function (candidate) {
             if (!candidate.hidden) return;
-            candidate.hinted = nextHinted;
+            candidate.hinted = false;
             candidate.revealed = nextRevealed;
           };
 
@@ -435,14 +428,10 @@
           render();
         }
 
-        function nextHiddenClickState(token, isTouchLike) {
-          if (!isTouchLike) return token.revealed ? 'covered' : 'revealed';
-          if (token.revealed) return 'covered';
-          if (token.hinted) return 'revealed';
-          return 'hinted';
+        function nextHiddenClickState(token) {
+          return token.revealed ? 'covered' : 'revealed';
         }
-
-        function renderNavigation() {
+function renderNavigation() {
           foldersEl.replaceChildren();
           state.folders.forEach(function (folder) {
             const section = document.createElement('section');
@@ -551,8 +540,7 @@
             return;
           }
           if (!shouldReviewHiddenToken(token)) return;
-          const isTouchLike = lastPointerType !== 'mouse' || window.matchMedia('(pointer: coarse)').matches;
-          setHiddenTokenView(note, token, nextHiddenClickState(token, isTouchLike));
+          setHiddenTokenView(note, token, nextHiddenClickState(token));
           render();
         });
 
@@ -581,16 +569,6 @@
           studyView.addEventListener(eventName, function () { clearTimeout(longPressTimer); });
         });
 
-        studyView.addEventListener('auxclick', function (event) {
-          if (event.button !== 1) return;
-          const tokenEl = event.target.closest('.token.hidden');
-          if (!tokenEl || !state) return;
-          event.preventDefault();
-          const note = currentNote();
-          const token = note.tokens.find(function (candidate) { return candidate.id === tokenEl.dataset.tokenId; });
-          if (!token) return;
-          toggleWrongToken(note, token);
-        });
 
         studyView.addEventListener('contextmenu', function (event) {
           const tokenEl = event.target.closest('.token.hidden');
@@ -599,10 +577,7 @@
           const note = currentNote();
           const token = note.tokens.find(function (candidate) { return candidate.id === tokenEl.dataset.tokenId; });
           if (!token) return;
-          if (shouldReviewHiddenToken(token)) {
-            setHiddenTokenView(note, token, token.hinted && !token.revealed ? 'covered' : 'hinted');
-            render();
-          }
+          toggleWrongToken(note, token);
         });
 
         hideRevealedBtn.addEventListener('click', function () {

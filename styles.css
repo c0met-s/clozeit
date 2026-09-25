@@ -410,7 +410,6 @@ body.mode-study .token.word {
 }
 
 body.mode-study .token.covered,
-body.mode-study .token.hinted,
 body.mode-study .token.hidden.revealed {
   cursor: pointer;
 }
@@ -425,28 +424,28 @@ body.mode-mark .token.word:hover {
   box-shadow: inset 0 -2px 0 rgba(237, 241, 244, 0.75);
 }
 
-.token.highlight-yellow:not(.covered):not(.hinted),
-.token.highlight-green:not(.covered):not(.hinted),
-.token.highlight-blue:not(.covered):not(.hinted),
-.token.highlight-pink:not(.covered):not(.hinted) {
+.token.highlight-yellow:not(.covered),
+.token.highlight-green:not(.covered),
+.token.highlight-blue:not(.covered),
+.token.highlight-pink:not(.covered) {
   color: var(--text);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
 
-.token.highlight-yellow:not(.covered):not(.hinted) {
+.token.highlight-yellow:not(.covered) {
   background: linear-gradient(to top, var(--highlight-yellow) 0 58%, transparent 58%);
 }
 
-.token.highlight-green:not(.covered):not(.hinted) {
+.token.highlight-green:not(.covered) {
   background: linear-gradient(to top, var(--highlight-green) 0 58%, transparent 58%);
 }
 
-.token.highlight-blue:not(.covered):not(.hinted) {
+.token.highlight-blue:not(.covered) {
   background: linear-gradient(to top, var(--highlight-blue) 0 58%, transparent 58%);
 }
 
-.token.highlight-pink:not(.covered):not(.hinted) {
+.token.highlight-pink:not(.covered) {
   background: linear-gradient(to top, var(--highlight-pink) 0 58%, transparent 58%);
 }
 
@@ -464,14 +463,6 @@ body.mode-mark .token.word:hover {
   box-shadow: inset 0 -1px 0 rgba(237, 241, 244, 0.55);
   user-select: none;
 }
-
-.token.hinted {
-  color: rgba(237, 241, 244, 0.82);
-  filter: blur(3px);
-  text-shadow: 0 0 8px rgba(237, 241, 244, 0.42);
-  user-select: none;
-}
-
 .token.hidden.revealed {
   user-select: text;
 }
