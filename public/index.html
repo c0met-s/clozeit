@@ -574,6 +574,7 @@ function renderNavigation() {
           const tokenEl = event.target.closest('.token.hidden');
           event.preventDefault();
           if (!tokenEl || !state) return;
+          if (lastPointerType !== 'mouse' || longPressHandled) return;
           const note = currentNote();
           const token = note.tokens.find(function (candidate) { return candidate.id === tokenEl.dataset.tokenId; });
           if (!token) return;

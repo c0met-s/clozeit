@@ -1862,6 +1862,7 @@ function renderNavigation() {
           if (!tokenEl) return;
 
           event.preventDefault();
+          if (lastPointerType !== 'mouse' || longPressHandled) return;
           const note = currentNote();
           if (!note) return;
 
@@ -2385,6 +2386,7 @@ function renderNavigation() {
     if (!tokenEl) return;
 
     event.preventDefault();
+    if (lastPointerType !== "mouse" || longPressHandled) return;
     const note = currentNote();
     const token = note?.tokens.find((candidate) => candidate.id === tokenEl.dataset.tokenId);
     if (!token) return;
