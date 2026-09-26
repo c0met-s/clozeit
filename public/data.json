@@ -1,6 +1,6 @@
 {
-  "currentFolderId": "folder-mtyfepml-6r7ik3",
-  "currentNoteId": "note-mtyfepml-zly9xc",
+  "currentFolderId": "folder-mtp2fd8c-2sbqqf",
+  "currentNoteId": "note-mtp2lt1d-0031y1",
   "folders": [
     {
       "id": "folder-mr3ev0mc-us90pb",
@@ -49255,7 +49255,7 @@
               "value": "염색사",
               "isSpace": false,
               "wordIndex": 58,
-              "hidden": false,
+              "hidden": true,
               "hiddenGroup": null,
               "wrong": false,
               "hinted": false,
@@ -141543,6 +141543,6 @@
   "reviewWrongOnly": false,
   "kind": "clozeit-public-data",
   "version": 1,
-  "shareId": "data-muie8n6j-8m63x0",
-  "publishedAt": "2026-09-26T12:56:29.275Z"
+  "shareId": "data-muiecbwd-q6399k",
+  "publishedAt": "2026-09-26T12:59:21.277Z"
 }
