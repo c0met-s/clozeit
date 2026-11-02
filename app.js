@@ -16,6 +16,7 @@
   const deleteNoteBtn = document.getElementById("delete-note");
   const hideRevealedBtn = document.getElementById("hide-revealed");
   const wrongOnlyBtn = document.getElementById("wrong-only");
+  const downloadPrintBtn = document.getElementById("download-print");
   const exportShareBtn = document.getElementById("export-share");
   const publishJsonBtn = document.getElementById("publish-json");
   const markHideBtn = document.getElementById("mark-hide");
@@ -1996,6 +1997,124 @@ function renderNavigation() {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  function printableFilePart(value) {
+    const cleaned = String(value || "Untitled")
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return (cleaned || "Untitled").slice(0, 56);
+  }
+
+  function worksheetBlank(value) {
+    const answerLength = Array.from(String(value).replace(/\s/g, "")).length;
+    const underlineLength = Math.max(8, Math.min(32, answerLength + 3));
+    return `[${"_".repeat(underlineLength)}]`;
+  }
+
+  function worksheetAtoms(note) {
+    const atoms = [];
+    const tokens = normalizeSavedTokens(note.text, note.tokens);
+
+    for (let index = 0; index < tokens.length; index += 1) {
+      const token = tokens[index];
+      if (!token.hidden) {
+        atoms.push({ value: token.value, whitespace: token.isSpace });
+        continue;
+      }
+
+      if (!token.hiddenGroup) {
+        atoms.push({ value: worksheetBlank(token.value), whitespace: false });
+        continue;
+      }
+
+      let answer = token.value;
+      let end = index;
+      while (end + 1 < tokens.length) {
+        let cursor = end + 1;
+        let between = "";
+        while (cursor < tokens.length && tokens[cursor].isSpace) {
+          between += tokens[cursor].value;
+          cursor += 1;
+        }
+        if (cursor >= tokens.length || !tokens[cursor].hidden || tokens[cursor].hiddenGroup !== token.hiddenGroup) {
+          break;
+        }
+        answer += between + tokens[cursor].value;
+        end = cursor;
+      }
+
+      atoms.push({ value: worksheetBlank(answer), whitespace: false });
+      index = end;
+    }
+
+    return atoms;
+  }
+
+  function wrapPrintableAtoms(atoms, columns = 78) {
+    const lines = [""];
+    const lineLength = () => lines[lines.length - 1].length;
+    const newLine = () => lines.push("");
+
+    atoms.forEach((atom) => {
+      if (atom.whitespace) {
+        const pieces = atom.value.split(/(\r\n|\r|\n)/);
+        pieces.forEach((piece) => {
+          if (!piece) return;
+          if (/^(\r\n|\r|\n)$/.test(piece)) {
+            newLine();
+            return;
+          }
+          lines[lines.length - 1] += piece;
+        });
+        return;
+      }
+
+      if (lineLength() > 0 && lineLength() + atom.value.length > columns) {
+        lines[lines.length - 1] = lines[lines.length - 1].replace(/[ \t]+$/, "");
+        newLine();
+      }
+      lines[lines.length - 1] += atom.value;
+    });
+
+    return lines.join("\r\n");
+  }
+
+  function printableText(note, variant) {
+    const isWorksheet = variant === "worksheet";
+    const atoms = isWorksheet
+      ? worksheetAtoms(note)
+      : normalizeSavedTokens(note.text, note.tokens).map((token) => ({
+          value: token.value,
+          whitespace: token.isSpace
+        }));
+    const label = isWorksheet ? "CLOZE WORKSHEET" : "ANSWER KEY";
+    const title = note.title?.trim() || titleFromText(note.text);
+    return `${label}\r\n${title}\r\n${"=".repeat(Math.min(78, Math.max(12, title.length)))}\r\n\r\n${wrapPrintableAtoms(atoms)}\r\n`;
+  }
+
+  function downloadTextFile(fileName, text) {
+    const blob = new Blob(["\uFEFF", text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function downloadPrintTexts() {
+    const note = currentNote();
+    if (!note) return;
+
+    const stamp = localDateStamp();
+    const version = nextExportVersion(stamp);
+    const fileBase = `${stamp}-V${version}-${printableFilePart(note.title)}`;
+    downloadTextFile(`${fileBase}-worksheet.txt`, printableText(note, "worksheet"));
+    downloadTextFile(`${fileBase}-answers.txt`, printableText(note, "answers"));
+    showModeDetail(`Downloaded ${fileBase}-worksheet.txt and ${fileBase}-answers.txt.`);
+  }
   async function exportSharePage() {
     const shareState = prepareShareState();
     const html = sharePageHtml(shareState);
@@ -2458,6 +2577,7 @@ function renderNavigation() {
     render();
     setMode(mode);
   });
+  downloadPrintBtn.addEventListener("click", downloadPrintTexts);
   exportShareBtn.addEventListener("click", exportSharePage);
   publishJsonBtn.addEventListener("click", publishJsonData);
   markHideBtn.addEventListener("click", hideSelected);
