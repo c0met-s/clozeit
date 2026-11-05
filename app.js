@@ -4,7 +4,7 @@
   const EXPORT_DIRECTORY_DB = "clozeit-export-directory-v1";
   const EXPORT_DIRECTORY_STORE = "handles";
   const EXPORT_DIRECTORY_KEY = "export-directory";
-  const PUBLISH_DIRECTORY_KEY = "publish-directory";
+
   const FALLBACK_FAVICON_DATA_URI = "data:image/png;base64,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";
 
   const foldersEl = document.getElementById("folders");
@@ -39,7 +39,7 @@
   let lastSafeRawText = "";
   let rawEditWarningTimer = null;
   let exportDirectoryHandle = null;
-  let publishDirectoryHandle = null;
+
   let faviconDataUri = "";
   let lastPointerType = "mouse";
   let longPressTimer = null;
@@ -1942,9 +1942,9 @@ function renderNavigation() {
     const fileName = "data.json";
 
     try {
-      const savedToFolder = await saveJsonToPublishFolder(fileName, json);
+      const savedToFolder = await saveJsonToExportFolder(fileName, json);
       if (savedToFolder) {
-        showModeDetail(`Published ${fileName} to your public site folder.`);
+        showModeDetail(`Saved ${fileName} to your export folder. Run the Clozeit publisher to put it online.`);
         return;
       }
     } catch (error) {
@@ -1954,29 +1954,29 @@ function renderNavigation() {
     }
 
     downloadJsonData(fileName, json);
-    showModeDetail(`Downloaded ${fileName}. Pick the public folder next time to write it directly.`);
+    showModeDetail(`Downloaded ${fileName}. Pick your export folder next time to save it there directly.`);
   }
 
-  async function saveJsonToPublishFolder(fileName, json) {
+  async function saveJsonToExportFolder(fileName, json) {
     if (!window.showDirectoryPicker || !window.indexedDB) {
       return false;
     }
 
-    let directoryHandle = publishDirectoryHandle;
+    let directoryHandle = exportDirectoryHandle;
     if (directoryHandle && !(await hasExportDirectoryPermission(directoryHandle))) {
       directoryHandle = null;
     }
 
     if (!directoryHandle) {
       directoryHandle = await window.showDirectoryPicker({
-        id: "clozeit-public-folder",
+        id: "clozeit-export-folder",
         mode: "readwrite"
       });
       if (!(await hasExportDirectoryPermission(directoryHandle))) {
         return false;
       }
-      publishDirectoryHandle = directoryHandle;
-      storePublishDirectoryHandle(directoryHandle);
+      exportDirectoryHandle = directoryHandle;
+      storeExportDirectoryHandle(directoryHandle);
     }
 
     const fileHandle = await directoryHandle.getFileHandle(fileName, { create: true });
@@ -2204,14 +2204,6 @@ function renderNavigation() {
 
   async function storeExportDirectoryHandle(directoryHandle) {
     return storeDirectoryHandle(EXPORT_DIRECTORY_KEY, directoryHandle);
-  }
-
-  async function loadPublishDirectoryHandle() {
-    return loadDirectoryHandle(PUBLISH_DIRECTORY_KEY);
-  }
-
-  async function storePublishDirectoryHandle(directoryHandle) {
-    return storeDirectoryHandle(PUBLISH_DIRECTORY_KEY, directoryHandle);
   }
 
   async function loadDirectoryHandle(key) {
@@ -2648,14 +2640,6 @@ function renderNavigation() {
     })
     .catch((error) => {
       console.warn("Could not load remembered export folder.", error);
-    });
-
-  loadPublishDirectoryHandle()
-    .then((handle) => {
-      publishDirectoryHandle = handle;
-    })
-    .catch((error) => {
-      console.warn("Could not load remembered public folder.", error);
     });
 
   loadFaviconDataUri()
