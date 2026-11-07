@@ -84,7 +84,7 @@ button.active {
   font-size: 20px;
 }
 
-.sidebar-header button {
+.sidebar-header > #add-folder {
   width: 34px;
   padding: 0;
   font-size: 22px;
@@ -494,3 +494,47 @@ body.mode-mark .token.word:hover {
     font-size: 17px;
   }
 }
+
+.brand-line {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-header > #add-folder {
+  width: 34px;
+  padding: 0;
+  font-size: 22px;
+}
+
+.credits-button {
+  min-height: 26px;
+  padding: 0 7px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.credits-button:hover,
+.credits-button:focus-visible {
+  border-color: var(--line);
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+.credits-dialog {
+  width: min(360px, calc(100vw - 32px));
+  margin: auto;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.credits-dialog::backdrop { background: rgba(0, 0, 0, 0.58); }
+.credits-dialog p { margin: 0 0 8px; line-height: 1.5; }
+.credits-dialog a { color: var(--accent); }
+.credits-dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }

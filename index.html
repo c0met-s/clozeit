@@ -14,7 +14,7 @@
   <body>
     <aside class="sidebar" aria-label="Notes navigation">
       <header class="sidebar-header">
-        <h1>Clozeit</h1>
+        <div class="brand-line"><h1>Clozeit</h1><button id="credits-button" class="credits-button" type="button">Credits</button></div>
         <button id="add-folder" type="button" title="New folder">+</button>
       </header>
       <div id="folders" class="folders" role="list"></div>
@@ -38,8 +38,7 @@
           <button id="hide-revealed" type="button">Hide revealed</button>
           <button id="wrong-only" type="button" aria-pressed="false">Wrong only</button>
           <button id="download-print" type="button">Download print TXT</button>
-          <button id="export-share" type="button">Export share page</button>
-          <button id="publish-json" type="button">Publish JSON</button>
+          <button id="publish-json" type="button">Update website data</button>
           <div class="color-switch" aria-label="Highlight color">
             <button class="color-button color-yellow" type="button" data-color="yellow" title="Yellow highlight"></button>
             <button class="color-button color-green" type="button" data-color="green" title="Green highlight"></button>
@@ -62,6 +61,11 @@
       </section>
     </main>
 
+    <dialog id="credits-dialog" class="credits-dialog">
+      <p>제작: 정혜성, Codex (GPT-5)를 통해 개발됨.</p>
+      <a href="mailto:sung110325@gmail.com">sung110325@gmail.com</a>
+      <form method="dialog"><button type="submit">Close</button></form>
+    </dialog>
     <script src="app.js"></script>
   </body>
 </html>

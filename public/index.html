@@ -190,6 +190,43 @@
       .nav-toggle,
       .drawer-overlay { display: none; }
 
+      .brand-line {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .credits-button {
+        min-height: 26px;
+        padding: 0 7px;
+        border-color: transparent;
+        background: transparent;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .credits-button:hover,
+      .credits-button:focus-visible {
+        border-color: var(--line);
+        background: #151c25;
+        color: var(--text);
+      }
+
+      .credits-dialog {
+        width: min(360px, calc(100vw - 32px));
+        margin: auto;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--text);
+      }
+
+      .credits-dialog::backdrop { background: rgba(0, 0, 0, 0.58); }
+      .credits-dialog p { margin: 0 0 8px; line-height: 1.5; }
+      .credits-dialog a { color: var(--accent); }
+      .credits-dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }
       @media (max-width: 720px) {
         body {
           grid-template-columns: 1fr;
@@ -221,7 +258,11 @@
 
         .drawer-overlay[hidden] { display: none; }
         .workspace { min-height: 100vh; }
-        .topbar { min-height: 54px; padding: 10px; }
+        .topbar { min-height: 54px; padding: 10px; flex-wrap: wrap; }
+
+        #hide-revealed,
+        #wrong-only,
+        #download-print { min-height: 30px; padding: 5px 8px; font-size: 12px; }
 
         .nav-toggle {
           display: inline-flex;
@@ -239,7 +280,7 @@
   </head>
   <body>
     <aside class="sidebar" aria-label="Notes navigation">
-      <header class="sidebar-header"><h1>Clozeit</h1></header>
+      <header class="sidebar-header"><div class="brand-line"><h1>Clozeit</h1><button id="credits-button" class="credits-button" type="button">Credits</button></div></header>
       <div id="folders" class="folders"></div>
     </aside>
     <div id="drawer-overlay" class="drawer-overlay" hidden></div>
@@ -250,10 +291,16 @@
         <div id="note-title" class="note-title">Clozeit</div>
         <button id="hide-revealed" type="button">Hide revealed</button>
         <button id="wrong-only" type="button" aria-pressed="false">Wrong only</button>
+        <button id="download-print" type="button">Print TXT</button>
       </header>
       <article id="study-view" class="study-view" tabindex="0" aria-label="Study note"><p class="status">Loading...</p></article>
     </main>
 
+    <dialog id="credits-dialog" class="credits-dialog">
+      <p>제작: 정혜성, Codex (GPT-5)를 통해 개발됨.</p>
+      <a href="mailto:sung110325@gmail.com">sung110325@gmail.com</a>
+      <form method="dialog"><button type="submit">Close</button></form>
+    </dialog>
     <script>
       (function () {
         const DATA_URL = 'data.json';
@@ -264,6 +311,9 @@
         const wrongOnlyBtn = document.getElementById('wrong-only');
         const navToggleBtn = document.getElementById('nav-toggle');
         const drawerOverlay = document.getElementById('drawer-overlay');
+        const downloadPrintBtn = document.getElementById('download-print');
+        const creditsBtn = document.getElementById('credits-button');
+        const creditsDialog = document.getElementById('credits-dialog');
         let sourceState = null;
         let state = null;
         let lastPointerType = 'mouse';
@@ -521,6 +571,12 @@ function renderNavigation() {
         });
 
         drawerOverlay.addEventListener('click', function () { setDrawerOpen(false); });
+        creditsBtn.addEventListener('click', function () {
+          if (typeof creditsDialog.showModal === 'function') creditsDialog.showModal();
+          else creditsDialog.setAttribute('open', '');
+        });
+
+        downloadPrintBtn.addEventListener('click', downloadPrintTexts);
         window.addEventListener('resize', function () { if (!isMobileLayout()) setDrawerOpen(false); });
         document.addEventListener('keydown', function (event) { if (event.key === 'Escape') setDrawerOpen(false); });
 
@@ -581,6 +637,124 @@ function renderNavigation() {
           toggleWrongToken(note, token);
         });
 
+        function printableFilePart(value) {
+          const cleaned = String(value || 'Untitled')
+            .replace(/[<>:"/\\|?*\x00-\x1f]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          return (cleaned || 'Untitled').slice(0, 56);
+        }
+
+        function worksheetBlank(value) {
+          const answerLength = Array.from(String(value).replace(/\s/g, '')).length;
+          const underlineLength = Math.max(8, Math.min(32, answerLength + 3));
+          return '[' + '_'.repeat(underlineLength) + ']';
+        }
+
+        function isSpaceToken(token) {
+          return Boolean(token.isSpace) || /^\s+$/.test(token.value || '');
+        }
+
+        function worksheetAtoms(note) {
+          const atoms = [];
+          const tokens = note.tokens || [];
+          for (let index = 0; index < tokens.length; index += 1) {
+            const token = tokens[index];
+            if (!token.hidden) {
+              atoms.push({ value: token.value, whitespace: isSpaceToken(token) });
+              continue;
+            }
+            if (!token.hiddenGroup) {
+              atoms.push({ value: worksheetBlank(token.value), whitespace: false });
+              continue;
+            }
+            let answer = token.value;
+            let end = index;
+            while (end + 1 < tokens.length) {
+              let cursor = end + 1;
+              let between = '';
+              while (cursor < tokens.length && isSpaceToken(tokens[cursor])) {
+                between += tokens[cursor].value;
+                cursor += 1;
+              }
+              if (cursor >= tokens.length || !tokens[cursor].hidden || tokens[cursor].hiddenGroup !== token.hiddenGroup) break;
+              answer += between + tokens[cursor].value;
+              end = cursor;
+            }
+            atoms.push({ value: worksheetBlank(answer), whitespace: false });
+            index = end;
+          }
+          return atoms;
+        }
+
+        function wrapPrintableAtoms(atoms, columns) {
+          const lines = [''];
+          const lineLength = function () { return lines[lines.length - 1].length; };
+          const newLine = function () { lines.push(''); };
+          atoms.forEach(function (atom) {
+            if (atom.whitespace) {
+              atom.value.split(/(\r\n|\r|\n)/).forEach(function (piece) {
+                if (!piece) return;
+                if (/^(\r\n|\r|\n)$/.test(piece)) newLine();
+                else lines[lines.length - 1] += piece;
+              });
+              return;
+            }
+            if (lineLength() > 0 && lineLength() + atom.value.length > columns) {
+              lines[lines.length - 1] = lines[lines.length - 1].replace(/[ \t]+$/, '');
+              newLine();
+            }
+            lines[lines.length - 1] += atom.value;
+          });
+          return lines.join('\r\n');
+        }
+
+        function printableText(note, variant) {
+          const isWorksheet = variant === 'worksheet';
+          const atoms = isWorksheet ? worksheetAtoms(note) : (note.tokens || []).map(function (token) {
+            return { value: token.value, whitespace: isSpaceToken(token) };
+          });
+          const label = isWorksheet ? 'CLOZE WORKSHEET' : 'ANSWER KEY';
+          const title = note.title || 'Untitled';
+          return label + '\r\n' + title + '\r\n' + '='.repeat(Math.min(78, Math.max(12, title.length))) + '\r\n\r\n' + wrapPrintableAtoms(atoms, 78) + '\r\n';
+        }
+
+        function downloadTextFile(fileName, text) {
+          const blob = new Blob(['\uFEFF', text], { type: 'text/plain;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        }
+
+        function localDateStamp() {
+          const now = new Date();
+          return String(now.getFullYear()).slice(-2) + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+        }
+
+        function nextPrintVersion(stamp) {
+          const key = 'clozeit-public-print-version-v1';
+          let record = null;
+          try { record = JSON.parse(localStorage.getItem(key)); } catch (error) {}
+          const next = record && record.stamp === stamp ? Number(record.version) + 1 : 1;
+          const version = Number.isFinite(next) && next > 0 ? next : 1;
+          localStorage.setItem(key, JSON.stringify({ stamp: stamp, version: version }));
+          return version;
+        }
+
+        function downloadPrintTexts() {
+          const note = currentNote();
+          if (!note) return;
+          const stamp = localDateStamp();
+          const version = nextPrintVersion(stamp);
+          const fileBase = stamp + '-V' + version + '-' + printableFilePart(note.title);
+          downloadTextFile(fileBase + '-worksheet.txt', printableText(note, 'worksheet'));
+          downloadTextFile(fileBase + '-answers.txt', printableText(note, 'answers'));
+        }
         hideRevealedBtn.addEventListener('click', function () {
           if (!state) return;
           const note = currentNote();
