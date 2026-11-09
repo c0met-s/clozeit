@@ -538,3 +538,64 @@ body.mode-mark .token.word:hover {
 .credits-dialog p { margin: 0 0 8px; line-height: 1.5; }
 .credits-dialog a { color: var(--accent); }
 .credits-dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }
+.library-toggle,
+.library-overlay {
+  display: none;
+}
+
+@media (max-width: 980px), (max-height: 640px) {
+  body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 20;
+    width: min(84vw, 320px);
+    max-height: none;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 160ms ease;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+    box-shadow: 16px 0 40px rgba(0, 0, 0, 0.35);
+  }
+
+  body.library-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .library-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: block;
+    background: rgba(0, 0, 0, 0.48);
+  }
+
+  .library-overlay[hidden] {
+    display: none;
+  }
+
+  .library-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  .topbar {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .actions {
+    grid-column: 1 / -1;
+  }
+}
+/* Clozes remain boxes in Mark mode, but must still be drag-selectable. */
+body.mode-mark .token.covered {
+  user-select: text;
+  -webkit-user-select: text;
+}

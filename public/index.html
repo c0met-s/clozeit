@@ -187,8 +187,8 @@
       .empty,
       .status { color: var(--muted); }
 
-      .nav-toggle,
-      .drawer-overlay { display: none; }
+      .library-toggle,
+      .library-overlay { display: none; }
 
       .brand-line {
         min-width: 0;
@@ -227,7 +227,7 @@
       .credits-dialog p { margin: 0 0 8px; line-height: 1.5; }
       .credits-dialog a { color: var(--accent); }
       .credits-dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }
-      @media (max-width: 720px) {
+      @media (max-width: 980px), (max-height: 640px) {
         body {
           grid-template-columns: 1fr;
           grid-template-rows: minmax(0, 1fr);
@@ -246,9 +246,9 @@
           box-shadow: 16px 0 40px rgba(0, 0, 0, 0.35);
         }
 
-        body.nav-open .sidebar { transform: translateX(0); }
+        body.library-open .sidebar { transform: translateX(0); }
 
-        .drawer-overlay {
+        .library-overlay {
           position: fixed;
           inset: 0;
           z-index: 10;
@@ -256,7 +256,7 @@
           background: rgba(0, 0, 0, 0.48);
         }
 
-        .drawer-overlay[hidden] { display: none; }
+        .library-overlay[hidden] { display: none; }
         .workspace { min-height: 100vh; }
         .topbar { min-height: 54px; padding: 10px; flex-wrap: wrap; }
 
@@ -264,7 +264,7 @@
         #wrong-only,
         #download-print { min-height: 30px; padding: 5px 8px; font-size: 12px; }
 
-        .nav-toggle {
+        .library-toggle {
           display: inline-flex;
           flex: 0 0 auto;
           align-items: center;
@@ -279,15 +279,15 @@
     </style>
   </head>
   <body>
-    <aside class="sidebar" aria-label="Notes navigation">
+    <aside id="library-sidebar" class="sidebar" aria-label="Notes navigation">
       <header class="sidebar-header"><div class="brand-line"><h1>Clozeit</h1><button id="credits-button" class="credits-button" type="button">Credits</button></div></header>
       <div id="folders" class="folders"></div>
     </aside>
-    <div id="drawer-overlay" class="drawer-overlay" hidden></div>
+    <div id="library-overlay" class="library-overlay" hidden></div>
 
     <main class="workspace">
       <header class="topbar">
-        <button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="folders">Notes</button>
+        <button id="library-toggle" class="library-toggle" type="button" data-library-toggle aria-expanded="false" aria-controls="library-sidebar">Library</button>
         <div id="note-title" class="note-title">Clozeit</div>
         <button id="hide-revealed" type="button">Hide revealed</button>
         <button id="wrong-only" type="button" aria-pressed="false">Wrong only</button>
@@ -301,6 +301,7 @@
       <a href="mailto:sung110325@gmail.com">sung110325@gmail.com</a>
       <form method="dialog"><button type="submit">Close</button></form>
     </dialog>
+    <script src="library-drawer.js"></script>
     <script>
       (function () {
         const DATA_URL = 'data.json';
@@ -309,8 +310,6 @@
         const studyView = document.getElementById('study-view');
         const hideRevealedBtn = document.getElementById('hide-revealed');
         const wrongOnlyBtn = document.getElementById('wrong-only');
-        const navToggleBtn = document.getElementById('nav-toggle');
-        const drawerOverlay = document.getElementById('drawer-overlay');
         const downloadPrintBtn = document.getElementById('download-print');
         const creditsBtn = document.getElementById('credits-button');
         const creditsDialog = document.getElementById('credits-dialog');
@@ -321,6 +320,114 @@
         let longPressHandled = false;
 
         function clone(value) { return JSON.parse(JSON.stringify(value)); }
+
+        function normalizeHighlight(value) {
+          return ['yellow', 'green', 'blue', 'pink'].indexOf(value) >= 0 ? value : (value === true ? 'yellow' : null);
+        }
+
+        function makeToken(value, id) {
+          return {
+            id: id,
+            value: value,
+            isSpace: /^\s+$/.test(value),
+            hidden: false,
+            hiddenGroup: null,
+            wrong: false,
+            hinted: false,
+            revealed: false,
+            highlight: null
+          };
+        }
+
+        function tokenize(text, offset) {
+          const parts = String(text || '').match(/\s+|[^\s]+/g) || [];
+          let cursor = Number(offset) || 0;
+          return parts.map(function (value) {
+            const token = makeToken(value, 't-' + cursor);
+            cursor += value.length;
+            return token;
+          });
+        }
+
+        function normalizeTokens(text, tokens) {
+          if (!Array.isArray(tokens) || tokens.map(function (token) { return token.value || ''; }).join('') !== text) {
+            return tokenize(text, 0);
+          }
+          return tokens.map(function (token, index) {
+            const next = makeToken(String(token.value || ''), token.id || 't-' + index);
+            next.hidden = Boolean(token.hidden);
+            next.hiddenGroup = typeof token.hiddenGroup === 'string' ? token.hiddenGroup : null;
+            next.wrong = Boolean(token.wrong);
+            next.hinted = Boolean(token.hinted);
+            next.revealed = Boolean(token.revealed);
+            next.highlight = normalizeHighlight(token.highlight);
+            if (next.isSpace) {
+              next.hidden = false;
+              next.hiddenGroup = null;
+              next.wrong = false;
+              next.hinted = false;
+              next.revealed = false;
+            }
+            return next;
+          });
+        }
+
+        function tokensFromMarks(text, marks) {
+          if (!Array.isArray(marks) || !marks.length) return tokenize(text, 0);
+          const normalized = marks.map(function (mark, index) {
+            const start = Math.max(0, Math.min(text.length, Number(mark.start)));
+            const end = Math.max(start, Math.min(text.length, Number(mark.end)));
+            if (!Number.isFinite(start) || !Number.isFinite(end) || start === end) return null;
+            return {
+              start: start,
+              end: end,
+              id: typeof mark.id === 'string' ? mark.id : 'mark-' + start + '-' + index,
+              hidden: Boolean(mark.hidden),
+              hiddenGroup: typeof mark.hiddenGroup === 'string' ? mark.hiddenGroup : null,
+              wrong: Boolean(mark.wrong),
+              hinted: Boolean(mark.hinted),
+              revealed: Boolean(mark.revealed),
+              highlight: normalizeHighlight(mark.highlight)
+            };
+          }).filter(Boolean);
+          if (!normalized.length) return tokenize(text, 0);
+          const boundaries = new Set([0, text.length]);
+          normalized.forEach(function (mark) { boundaries.add(mark.start); boundaries.add(mark.end); });
+          const points = Array.from(boundaries).sort(function (a, b) { return a - b; });
+          const tokens = [];
+          for (let index = 0; index < points.length - 1; index += 1) {
+            const start = points[index];
+            const end = points[index + 1];
+            const value = text.slice(start, end);
+            const active = normalized.filter(function (mark) { return mark.start <= start && mark.end >= end; });
+            if (!active.length) {
+              tokens.push.apply(tokens, tokenize(value, start));
+              continue;
+            }
+            const token = makeToken(value, active[active.length - 1].id);
+            active.forEach(function (mark) {
+              if (mark.hidden) token.hidden = true;
+              if (mark.hiddenGroup) token.hiddenGroup = mark.hiddenGroup;
+              if (mark.wrong) token.wrong = true;
+              if (mark.hinted) token.hinted = true;
+              if (mark.revealed) token.revealed = true;
+              if (mark.highlight) token.highlight = mark.highlight;
+            });
+            tokens.push(token);
+          }
+          return tokens;
+        }
+
+        function hydrateStateNotes(nextState) {
+          (nextState.folders || []).forEach(function (folder) {
+            (folder.notes || []).forEach(function (note) {
+              note.text = typeof note.text === 'string' ? note.text : '';
+              note.tokens = Array.isArray(note.marks) ? tokensFromMarks(note.text, note.marks) : normalizeTokens(note.text, note.tokens);
+              delete note.marks;
+            });
+          });
+          return nextState;
+        }
 
         function storageKey() {
           return 'clozeit-public-study-progress-v2';
@@ -394,17 +501,31 @@
           return nextState;
         }
 
-        function saveState() {
-          try { localStorage.setItem(storageKey(), JSON.stringify(state)); } catch (error) {}
+        function compactStudyProgress() {
+          return {
+            currentFolderId: state.currentFolderId,
+            currentNoteId: state.currentNoteId,
+            reviewWrongOnly: Boolean(state.reviewWrongOnly),
+            folders: state.folders.map(function (folder) {
+              return {
+                id: folder.id,
+                notes: folder.notes.map(function (note) {
+                  return {
+                    id: note.id,
+                    tokens: note.tokens.filter(function (token) {
+                      return token.hidden && (token.wrong || token.hinted || token.revealed);
+                    }).map(function (token) {
+                      return { id: token.id, wrong: Boolean(token.wrong), hinted: Boolean(token.hinted), revealed: Boolean(token.revealed) };
+                    })
+                  };
+                })
+              };
+            })
+          };
         }
 
-        function isMobileLayout() { return window.matchMedia('(max-width: 720px)').matches; }
-
-        function setDrawerOpen(open) {
-          const nextOpen = Boolean(open) && isMobileLayout();
-          document.body.classList.toggle('nav-open', nextOpen);
-          drawerOverlay.hidden = !nextOpen;
-          navToggleBtn.setAttribute('aria-expanded', String(nextOpen));
+        function saveState() {
+          try { localStorage.setItem(storageKey(), JSON.stringify(compactStudyProgress())); } catch (error) {}
         }
 
         function currentFolder() {
@@ -527,19 +648,27 @@ function renderNavigation() {
             return;
           }
 
+          let plainText = '';
+          const flushPlainText = function () {
+            if (!plainText) return;
+            studyView.appendChild(document.createTextNode(plainText));
+            plainText = '';
+          };
           note.tokens.forEach(function (token) {
-            if (token.isSpace && !token.highlight) {
-              studyView.appendChild(document.createTextNode(token.value));
+            const needsElement = Boolean(token.hidden || token.highlight);
+            if (!needsElement) {
+              plainText += token.value;
               return;
             }
+            flushPlainText();
             const span = document.createElement('span');
             span.className = tokenClass(token);
             span.dataset.tokenId = token.id;
             span.textContent = token.value;
             studyView.appendChild(span);
           });
+          flushPlainText();
         }
-
         function render() {
           renderNavigation();
           renderNote();
@@ -563,22 +692,9 @@ function renderNavigation() {
           state.currentFolderId = button.dataset.folderId;
           state.currentNoteId = button.dataset.noteId;
           render();
-          setDrawerOpen(false);
-        });
-
-        navToggleBtn.addEventListener('click', function () {
-          setDrawerOpen(!document.body.classList.contains('nav-open'));
-        });
-
-        drawerOverlay.addEventListener('click', function () { setDrawerOpen(false); });
-        creditsBtn.addEventListener('click', function () {
-          if (typeof creditsDialog.showModal === 'function') creditsDialog.showModal();
-          else creditsDialog.setAttribute('open', '');
         });
 
         downloadPrintBtn.addEventListener('click', downloadPrintTexts);
-        window.addEventListener('resize', function () { if (!isMobileLayout()) setDrawerOpen(false); });
-        document.addEventListener('keydown', function (event) { if (event.key === 'Escape') setDrawerOpen(false); });
 
         studyView.addEventListener('click', function (event) {
           const tokenEl = event.target.closest('.token.hidden');
@@ -793,7 +909,7 @@ function renderNavigation() {
             return response.json();
           })
           .then(function (data) {
-            sourceState = data;
+            sourceState = hydrateStateNotes(data);
             state = loadLocalState();
             if (!Array.isArray(state.folders) || !state.folders.length) throw new Error('Invalid data.json');
             render();

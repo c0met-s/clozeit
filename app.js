@@ -103,7 +103,8 @@
         folder.notes = Array.isArray(folder.notes) ? folder.notes : [];
         folder.notes.forEach((note) => {
           note.text = typeof note.text === "string" ? note.text : "";
-          note.tokens = normalizeSavedTokens(note.text, note.tokens);
+          note.tokens = hydrateNoteTokens(note);
+          delete note.marks;
         });
       });
       if (!findFolder(saved.currentFolderId, saved)) {
@@ -128,7 +129,7 @@
   }
 
   function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(compactState(state)));
   }
 
   function captureScrollState() {
@@ -211,23 +212,26 @@
     }
   }
 
-  function tokenize(text) {
+  function tokenize(text, offset = 0) {
     const parts = text.match(/\s+|[^\s]+/g) || [];
     let wordIndex = 0;
-    return parts.map((value, index) => {
+    let cursor = offset;
+    return parts.map((value) => {
       const isSpace = /^\s+$/.test(value);
-      return {
-        id: `t-${index}`,
+      const token = {
+        id: `t-${cursor}`,
         value,
         isSpace,
         wordIndex: isSpace ? null : wordIndex++,
         hidden: false,
         hiddenGroup: null,
         wrong: false,
-      hinted: false,
+        hinted: false,
         revealed: false,
         highlight: null
       };
+      cursor += value.length;
+      return token;
     });
   }
 
@@ -265,10 +269,10 @@
     return Boolean(token.hidden || token.hiddenGroup || token.wrong || token.hinted || token.revealed || token.highlight);
   }
 
-  function plainToken(value) {
+  function plainToken(value, id = createId("token")) {
     const isSpace = /^\s+$/.test(value);
     return {
-      id: createId("token"),
+      id,
       value,
       isSpace,
       wordIndex: null,
@@ -281,14 +285,11 @@
     };
   }
 
-  function tokenizeSegment(text) {
+  function tokenizeSegment(text, offset = 0) {
     if (!text) return [];
-    return tokenize(text).map((token) => plainToken(token.value));
+    return tokenize(text, offset).map((token) => plainToken(token.value, token.id));
   }
 
-  function tokenizeInsertedSegment(text) {
-    return tokenizeSegment(text);
-  }
 
   function normalizeTokenIndexes(tokens) {
     let wordIndex = 0;
@@ -298,6 +299,7 @@
       if (token.isSpace) {
         token.hidden = false;
         token.hiddenGroup = null;
+        token.wrong = false;
         token.hinted = false;
         token.revealed = false;
       }
@@ -315,31 +317,154 @@
     });
   }
 
+  function markFromToken(token, start, end) {
+    const mark = { start, end, id: token.id };
+    if (token.hidden) mark.hidden = true;
+    if (token.hiddenGroup) mark.hiddenGroup = token.hiddenGroup;
+    if (token.wrong) mark.wrong = true;
+    if (token.hinted) mark.hinted = true;
+    if (token.revealed) mark.revealed = true;
+    if (token.highlight) mark.highlight = token.highlight;
+    return mark;
+  }
+
+  function marksFromTokens(tokens) {
+    return tokenRanges(tokens)
+      .filter(({ token }) => hasMarkState(token))
+      .map(({ token, start, end }) => markFromToken(token, start, end));
+  }
+
+  function comparableMarkState(token) {
+    return [
+      Boolean(token.hidden),
+      token.hiddenGroup || "",
+      Boolean(token.wrong),
+      Boolean(token.hinted),
+      Boolean(token.revealed),
+      token.highlight || ""
+    ].join("|");
+  }
+
+  function coalesceAdjacentTokens(tokens) {
+    const joined = [];
+    tokens.forEach((rawToken, index) => {
+      const token = normalizeToken(rawToken, `token-${index}`);
+      const previous = joined[joined.length - 1];
+      const canJoin = previous && !previous.isSpace && !token.isSpace &&
+        hasMarkState(previous) && hasMarkState(token) &&
+        comparableMarkState(previous) === comparableMarkState(token);
+      if (canJoin) previous.value += token.value;
+      else joined.push(token);
+    });
+    return normalizeTokenIndexes(joined);
+  }
+
+  function cleanMarks(text, marks) {
+    if (!Array.isArray(marks)) return [];
+    return marks.map((mark, index) => {
+      const start = Math.max(0, Math.min(text.length, Number(mark.start)));
+      const end = Math.max(start, Math.min(text.length, Number(mark.end)));
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start === end) return null;
+      return {
+        start,
+        end,
+        id: typeof mark.id === "string" ? mark.id : `mark-${start}-${index}`,
+        hidden: Boolean(mark.hidden),
+        hiddenGroup: typeof mark.hiddenGroup === "string" ? mark.hiddenGroup : null,
+        wrong: Boolean(mark.wrong),
+        hinted: Boolean(mark.hinted),
+        revealed: Boolean(mark.revealed),
+        highlight: normalizeTokenHighlight(mark.highlight)
+      };
+    }).filter(Boolean);
+  }
+
+  function tokensFromMarks(text, marks) {
+    const normalizedMarks = cleanMarks(text, marks);
+    if (!normalizedMarks.length) return tokenize(text);
+    const boundaries = new Set([0, text.length]);
+    normalizedMarks.forEach((mark) => { boundaries.add(mark.start); boundaries.add(mark.end); });
+    const points = [...boundaries].sort((a, b) => a - b);
+    const nextTokens = [];
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const start = points[index];
+      const end = points[index + 1];
+      const value = text.slice(start, end);
+      const activeMarks = normalizedMarks.filter((mark) => mark.start <= start && mark.end >= end);
+      if (!activeMarks.length) {
+        nextTokens.push(...tokenizeSegment(value, start));
+        continue;
+      }
+      const token = plainToken(value, activeMarks[activeMarks.length - 1].id);
+      activeMarks.forEach((mark) => {
+        if (mark.hidden) token.hidden = true;
+        if (mark.hiddenGroup) token.hiddenGroup = mark.hiddenGroup;
+        if (mark.wrong) token.wrong = true;
+        if (mark.hinted) token.hinted = true;
+        if (mark.revealed) token.revealed = true;
+        if (mark.highlight) token.highlight = mark.highlight;
+      });
+      nextTokens.push(token);
+    }
+    return coalesceAdjacentTokens(nextTokens);
+  }
+
   function normalizeSavedTokens(text, tokens) {
     if (!Array.isArray(tokens)) return tokenize(text);
-
     const savedText = tokens.map((token) => token.value || "").join("");
-    if (savedText !== text) {
-      return mergeTokenState(text, tokens);
-    }
+    if (savedText !== text) return mergeTokenState(text, tokens);
+    return coalesceAdjacentTokens(tokens.map((token, index) => normalizeToken(token, `t-${index}`)));
+  }
 
-    let wordIndex = 0;
-    return tokens.map((token, index) => {
-      const value = typeof token.value === "string" ? token.value : "";
-      const isSpace = /^\s+$/.test(value);
-      return {
-        id: token.id || `t-${index}`,
-        value,
-        isSpace,
-        wordIndex: isSpace ? null : wordIndex++,
-        hidden: Boolean(token.hidden),
-        hiddenGroup: typeof token.hiddenGroup === "string" ? token.hiddenGroup : null,
-        wrong: Boolean(token.wrong),
-        hinted: Boolean(token.hinted),
-        revealed: Boolean(token.revealed),
-        highlight: normalizeTokenHighlight(token.highlight)
-      };
+  function hydrateNoteTokens(note) {
+    if (Array.isArray(note.marks)) return tokensFromMarks(note.text, note.marks);
+    return normalizeSavedTokens(note.text, note.tokens);
+  }
+
+  function compactNote(note) {
+    return { id: note.id, title: note.title, text: note.text, marks: marksFromTokens(note.tokens || []) };
+  }
+
+  function compactState(sourceState) {
+    return {
+      ...sourceState,
+      folders: sourceState.folders.map((folder) => ({
+        ...folder,
+        notes: (folder.notes || []).map(compactNote)
+      }))
+    };
+  }
+
+  function commonPrefixLength(left, right) {
+    const limit = Math.min(left.length, right.length);
+    let index = 0;
+    while (index < limit && left[index] === right[index]) index += 1;
+    return index;
+  }
+
+  function commonSuffixLength(left, right, prefixLength) {
+    const limit = Math.min(left.length, right.length) - prefixLength;
+    let length = 0;
+    while (length < limit && left[left.length - 1 - length] === right[right.length - 1 - length]) length += 1;
+    return length;
+  }
+
+  function remapMarksForEdit(oldText, newText, marks) {
+    const prefixLength = commonPrefixLength(oldText, newText);
+    const suffixLength = commonSuffixLength(oldText, newText, prefixLength);
+    const oldChangeEnd = oldText.length - suffixLength;
+    const newChangeEnd = newText.length - suffixLength;
+    const delta = newText.length - oldText.length;
+    const remapped = [];
+    cleanMarks(oldText, marks).forEach((mark) => {
+      if (mark.end <= prefixLength) remapped.push(mark);
+      else if (mark.start >= oldChangeEnd) remapped.push({ ...mark, start: mark.start + delta, end: mark.end + delta });
+      else {
+        if (mark.start < prefixLength) remapped.push({ ...mark, end: prefixLength });
+        if (mark.end > oldChangeEnd) remapped.push({ ...mark, id: `${mark.id}-tail`, start: newChangeEnd, end: mark.end + delta });
+      }
     });
+    return remapped;
   }
 
   function mergeTokenState(text, oldTokens) {
@@ -348,65 +473,9 @@
       : [];
     const oldText = normalizedOldTokens.map((token) => token.value).join("");
     if (!oldText) return tokenize(text);
-    if (oldText === text) return normalizeSavedTokens(text, normalizedOldTokens);
-
-    const oldTextOffset = text.indexOf(oldText);
-    const occupied = [];
-    const remappedMarks = tokenRanges(normalizedOldTokens)
-      .filter(({ token }) => !token.isSpace && hasMarkState(token))
-      .map(({ token, start }) => {
-        const estimatedStart = oldTextOffset >= 0 ? oldTextOffset + start : start;
-        const matchStart = findBestNonOverlappingMatch(text, token.value, estimatedStart, occupied);
-        if (matchStart < 0) return null;
-        const match = {
-          start: matchStart,
-          end: matchStart + token.value.length,
-          token
-        };
-        occupied.push(match);
-        return match;
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.start - b.start);
-
-    if (!remappedMarks.length) return tokenize(text);
-
-    const nextTokens = [];
-    let cursor = 0;
-    remappedMarks.forEach((mark) => {
-      if (mark.start < cursor) return;
-      nextTokens.push(...tokenizeInsertedSegment(text.slice(cursor, mark.start)));
-      nextTokens.push(cloneToken(mark.token, text.slice(mark.start, mark.end), mark.token.id));
-      cursor = mark.end;
-    });
-    nextTokens.push(...tokenizeInsertedSegment(text.slice(cursor)));
-
-    return normalizeTokenIndexes(nextTokens);
+    if (oldText === text) return coalesceAdjacentTokens(normalizedOldTokens);
+    return tokensFromMarks(text, remapMarksForEdit(oldText, text, marksFromTokens(normalizedOldTokens)));
   }
-
-  function findBestNonOverlappingMatch(text, value, estimatedStart, occupied) {
-    if (!value) return -1;
-
-    let bestIndex = -1;
-    let bestDistance = Infinity;
-    let index = text.indexOf(value);
-
-    while (index >= 0) {
-      const end = index + value.length;
-      const overlaps = occupied.some((range) => index < range.end && end > range.start);
-      if (!overlaps) {
-        const distance = Math.abs(index - estimatedStart);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestIndex = index;
-        }
-      }
-      index = text.indexOf(value, index + 1);
-    }
-
-    return bestIndex;
-  }
-
   function currentFolder() {
     return findFolder(state.currentFolderId, state);
   }
@@ -512,21 +581,30 @@
       return;
     }
 
+    let plainText = "";
+    const flushPlainText = () => {
+      if (!plainText) return;
+      studyView.appendChild(document.createTextNode(plainText));
+      plainText = "";
+    };
+
     note.tokens.forEach((token) => {
-      if (token.isSpace && !token.highlight) {
-        studyView.appendChild(document.createTextNode(token.value));
+      const needsElement = mode === "mark" || hasMarkState(token) || token.id === activeTokenId;
+      if (!needsElement) {
+        plainText += token.value;
         return;
       }
 
+      flushPlainText();
       const span = document.createElement("span");
       span.className = tokenClass(token);
       span.dataset.tokenId = token.id;
       span.textContent = token.value;
       studyView.appendChild(span);
     });
+    flushPlainText();
     updateCustomSelectionVisuals();
   }
-
   function tokenClass(token) {
     const classes = ["token", token.isSpace ? "space" : "word"];
     const reviewHidden = shouldReviewHiddenToken(token);
@@ -843,6 +921,21 @@
       offset = range?.startOffset || 0;
     }
 
+    const coveredTokenEl = event.target instanceof Element
+      ? event.target.closest(".token.word.covered")
+      : null;
+    if (coveredTokenEl && studyView.contains(coveredTokenEl)) {
+      const textNode = coveredTokenEl.firstChild;
+      const rect = coveredTokenEl.getBoundingClientRect();
+      if (textNode?.nodeType === Node.TEXT_NODE && rect.width > 0) {
+        const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+        return {
+          id: coveredTokenEl.dataset.tokenId,
+          offset: Math.round(ratio * textNode.textContent.length)
+        };
+      }
+    }
+
     if (!node) return null;
 
     const tokenEl = node.nodeType === Node.TEXT_NODE
@@ -1127,7 +1220,7 @@
       }
     });
 
-    note.tokens = nextTokens;
+    note.tokens = coalesceAdjacentTokens(nextTokens);
     activeTokenId = null;
     cachedSelectionParts = [];
     clearNativeSelection();
@@ -1233,27 +1326,20 @@
     return token.revealed ? "covered" : "revealed";
   }
   function preparePublicData() {
-    const publicState = JSON.parse(JSON.stringify(state));
+    const publicState = compactState(state);
     publicState.kind = "clozeit-public-data";
-    publicState.version = 1;
+    publicState.version = 2;
     publicState.shareId = createId("data");
     publicState.publishedAt = new Date().toISOString();
     publicState.mode = "study";
     publicState.reviewWrongOnly = false;
     publicState.folders.forEach((folder) => {
       folder.notes.forEach((note) => {
-        note.tokens = normalizeSavedTokens(note.text, note.tokens).map((token) => ({
-          ...token,
-          hinted: false,
-          revealed: false,
-          hiddenGroup: token.hidden ? token.hiddenGroup : null,
-          wrong: false
-        }));
+        note.marks = note.marks.map(({ wrong, hinted, revealed, ...mark }) => mark);
       });
     });
     return publicState;
   }
-
   async function publishJsonData() {
     const publicData = preparePublicData();
     const json = `${JSON.stringify(publicData, null, 2)}\n`;
@@ -1762,7 +1848,7 @@
     }
 
     note.text = rawEditor.value;
-    note.tokens = nextTokens;
+    note.tokens = coalesceAdjacentTokens(nextTokens);
     lastSafeRawText = note.text;
     saveState();
     renderNavigation();
